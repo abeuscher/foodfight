@@ -1,0 +1,138 @@
+[gd_scene load_steps=6 format=3 uid="uid://dvvley1igspl4"]
+
+[ext_resource type="Script" uid="uid://bo2h1o560ovf5" path="res://scripts/start_screen.gd" id="1_tx5wa"]
+[ext_resource type="Theme" uid="uid://bf5xqbycdo8nf" path="res://resources/theme.tres" id="2_jkl52"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qnwyx"]
+bg_color = Color(0.0705882, 0.407843, 0.380392, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.180392, 0.631373, 0.596078, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="LabelSettings" id="LabelSettings_hhf6q"]
+font_size = 36
+font_color = Color(1, 0.847059, 0, 1)
+outline_size = 4
+outline_color = Color(0.917647, 0.415686, 0.0901961, 1)
+shadow_size = 5
+shadow_color = Color(0, 0, 0, 0.4)
+shadow_offset = Vector2(2, 2)
+
+[sub_resource type="LabelSettings" id="LabelSettings_1r5y8"]
+font_size = 18
+shadow_size = 2
+shadow_color = Color(0, 0, 0, 0.3)
+
+[node name="StartScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_jkl52")
+script = ExtResource("1_tx5wa")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0588235, 0.309804, 0.286275, 1)
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -200.0
+offset_right = 250.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_qnwyx")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 15
+
+[node name="Title" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "FOOD FIGHT!"
+label_settings = SubResource("LabelSettings_hhf6q")
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "A tasty strategy game"
+label_settings = SubResource("LabelSettings_1r5y8")
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 15)
+layout_mode = 2
+
+[node name="Player1Container" type="VBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Player1Label" type="Label" parent="Panel/VBoxContainer/Player1Container"]
+layout_mode = 2
+text = "Player 1 Name:"
+horizontal_alignment = 1
+
+[node name="Player1Input" type="LineEdit" parent="Panel/VBoxContainer/Player1Container"]
+layout_mode = 2
+placeholder_text = "Enter player 1 name"
+alignment = 1
+max_length = 15
+
+[node name="Player2Container" type="VBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Player2Label" type="Label" parent="Panel/VBoxContainer/Player2Container"]
+layout_mode = 2
+text = "Player 2 Name:"
+horizontal_alignment = 1
+
+[node name="Player2Input" type="LineEdit" parent="Panel/VBoxContainer/Player2Container"]
+layout_mode = 2
+placeholder_text = "Enter player 2 name"
+alignment = 1
+max_length = 15
+
+[node name="Spacer2" type="Control" parent="Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 15)
+layout_mode = 2
+
+[node name="StartButtonContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="StartButton" type="Button" parent="Panel/VBoxContainer/StartButtonContainer"]
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+text = "Start Game"
+
+[connection signal="pressed" from="Panel/VBoxContainer/StartButtonContainer/StartButton" to="." method="_on_start_button_pressed"]
