@@ -9,8 +9,9 @@ var turn_label
 var phase_label
 var resource_label
 var weapon_buttons_container
-var attack_buttons_container
+var targeting_buttons_container
 var end_placement_button
+var end_targeting_button
 
 # Reference to components
 var weapon_placement
@@ -52,8 +53,11 @@ func _ready():
 	if main.has_node("UI/BottomBar/EndPlacementButton"):
 		end_placement_button = main.get_node("UI/BottomBar/EndPlacementButton")
 	
-	if main.has_node("UI/BottomBar/AttackButtonsContainer"):
-		attack_buttons_container = main.get_node("UI/BottomBar/AttackButtonsContainer")
+	if main.has_node("UI/BottomBar/TargetingButtonsContainer"):
+		targeting_buttons_container = main.get_node("UI/BottomBar/TargetingButtonsContainer")
+	
+	if main.has_node("UI/BottomBar/EndTargetingButton"):
+		end_targeting_button = main.get_node("UI/BottomBar/EndTargetingButton")
 	
 	# Get references to other nodes
 	if main.has_node("WeaponPlacement"):
@@ -105,10 +109,12 @@ func update_ui(current_state, current_player_index):
 				phase_label.add_theme_color_override("font_color", Color(0.5, 0.5, 1.0))  # Blue for setup
 			game_state_machine.GameState.PLACEMENT:
 				phase_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.2))  # Green for placement
+			game_state_machine.GameState.TARGETING:
+				phase_label.add_theme_color_override("font_color", Color(0.9, 0.6, 0.1))  # Orange for targeting
 			game_state_machine.GameState.ATTACK:
 				phase_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))  # Red for attack
 			game_state_machine.GameState.RESOLUTION:
-				phase_label.add_theme_color_override("font_color", Color(0.9, 0.6, 0.1))  # Orange for resolution
+				phase_label.add_theme_color_override("font_color", Color(0.8, 0.4, 0.8))  # Purple for resolution
 	
 	# Update resource label if in placement phase
 	if resource_label and weapon_placement:
@@ -121,9 +127,9 @@ func update_ui(current_state, current_player_index):
 	if weapon_buttons_container:
 		weapon_buttons_container.visible = (current_state == game_state_machine.GameState.PLACEMENT)
 	
-	# Show/hide attack buttons based on game state
-	if attack_buttons_container:
-		attack_buttons_container.visible = (current_state == game_state_machine.GameState.ATTACK)
+	# Show/hide targeting buttons based on game state
+	if targeting_buttons_container:
+		targeting_buttons_container.visible = (current_state == game_state_machine.GameState.TARGETING)
 	
 	# Show/hide end placement button
 	if end_placement_button and player_manager:
@@ -135,6 +141,17 @@ func update_ui(current_state, current_player_index):
 			
 			# Update button text to show which player is ending placement
 			end_placement_button.text = "End " + player_manager.get_current_player_name() + "'s Placement"
+	
+	# Show/hide end targeting button
+	if end_targeting_button and player_manager:
+		end_targeting_button.visible = (current_state == game_state_machine.GameState.TARGETING)
+		if current_state == game_state_machine.GameState.TARGETING:
+			# Make it more visible by bringing it to front and styling it
+			end_targeting_button.z_index = 1
+			end_targeting_button.modulate = Color(1, 0.8, 0.2)  # Gold color to stand out
+			
+			# Update button text to show which player is ending targeting
+			end_targeting_button.text = "End " + player_manager.get_current_player_name() + "'s Targeting"
 
 # Connect the end placement button
 func connect_end_placement_button(callback):
@@ -147,6 +164,17 @@ func connect_end_placement_button(callback):
 	else:
 		print("Warning: Could not connect end placement button")
 
+# Connect the end targeting button
+func connect_end_targeting_button(callback):
+	if !is_initialized:
+		await _ready()
+	
+	if end_targeting_button and !end_targeting_button.is_connected("pressed", callback):
+		end_targeting_button.pressed.connect(callback)
+		print("End targeting button connected")
+	else:
+		print("Warning: Could not connect end targeting button")
+
 # Update resource display
 func update_resource_display(player_id, amount):
 	if !is_initialized or !resource_label or !player_manager:
@@ -155,13 +183,13 @@ func update_resource_display(player_id, amount):
 	if player_id == player_manager.current_player_index:
 		resource_label.text = "Resources: " + str(amount)
 
-# Create attack buttons
-func create_attack_buttons(player_id, weapons_data, weapon_select_callback):
-	if !is_initialized or !attack_buttons_container:
+# Create targeting buttons
+func create_targeting_buttons(player_id, weapons_data, weapon_select_callback):
+	if !is_initialized or !targeting_buttons_container:
 		return
 	
 	# Clear existing buttons
-	for child in attack_buttons_container.get_children():
+	for child in targeting_buttons_container.get_children():
 		child.queue_free()
 	
 	# Create a button for each weapon
@@ -176,4 +204,4 @@ func create_attack_buttons(player_id, weapons_data, weapon_select_callback):
 		button.pressed.connect(func(): weapon_select_callback.call(weapon, player_id))
 		
 		# Add to container
-		attack_buttons_container.add_child(button)
+		targeting_buttons_container.add_child(button)

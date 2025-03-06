@@ -10,6 +10,7 @@ var game_state_machine
 var game_ui_manager
 var player_manager
 var placement_state
+var targeting_state
 var attack_state
 var weapon_manager
 var targeting_manager
@@ -80,6 +81,7 @@ func get_component_references(main_node):
 	game_ui_manager = main_node.get_node_or_null("GameUIManager")
 	player_manager = main_node.get_node_or_null("PlayerManager")
 	placement_state = main_node.get_node_or_null("PlacementState")
+	targeting_state = main_node.get_node_or_null("TargetingState")
 	attack_state = main_node.get_node_or_null("AttackState")
 	weapon_types = main_node.get_node_or_null("WeaponTypes")
 	weapon_placement = main_node.get_node_or_null("WeaponPlacement")
@@ -114,6 +116,7 @@ func get_component_references(main_node):
 	if not game_ui_manager: print("Warning: GameUIManager not found")
 	if not player_manager: print("Warning: PlayerManager not found")
 	if not placement_state: print("Warning: PlacementState not found")
+	if not targeting_state: print("Warning: TargetingState not found")
 	if not attack_state: print("Warning: AttackState not found")
 	if not weapon_manager: print("Warning: WeaponManager not found")
 	if not targeting_manager: print("Warning: TargetingManager not found")
@@ -125,6 +128,7 @@ func get_component_references(main_node):
 	print("Game UI Manager: ", game_ui_manager != null)
 	print("Player Manager: ", player_manager != null)
 	print("Placement State: ", placement_state != null)
+	print("Targeting State: ", targeting_state != null)
 	print("Attack State: ", attack_state != null)
 	print("Weapon Manager: ", weapon_manager != null)
 	print("Targeting Manager: ", targeting_manager != null)
@@ -200,7 +204,15 @@ func initialize_components():
 	else:
 		print("Warning: PlacementState not initialized (missing method or node)")
 	
-	# 9. Initialize attack state
+	# 9. Initialize targeting state
+	if targeting_state and targeting_state.has_method("initialize"):
+		print("Initializing Targeting State...")
+		targeting_state.initialize(game_board, weapon_manager, targeting_manager, targeting_visualization)
+		emit_signal("component_initialized", "TargetingState")
+	else:
+		print("Warning: TargetingState not initialized (missing method or node)")
+	
+	# 10. Initialize attack state
 	if attack_state and attack_state.has_method("initialize"):
 		print("Initializing Attack State...")
 		attack_state.initialize(game_board, weapon_types)
@@ -208,7 +220,7 @@ func initialize_components():
 	else:
 		print("Warning: AttackState not initialized (missing method or node)")
 	
-	# 10. Initialize targeting visualization
+	# 11. Initialize targeting visualization
 	if targeting_visualization and targeting_visualization.has_method("initialize"):
 		print("Initializing Targeting Visualization...")
 		targeting_visualization.initialize(game_board, attack_state)
@@ -216,16 +228,17 @@ func initialize_components():
 	else:
 		print("Warning: TargetingVisualization not initialized (missing method or node)")
 	
-	# 11. Wait a final frame
+	# 12. Wait a final frame
 	await get_tree().process_frame
 	
-	# 12. Initialize game state machine (depends on everything)
+	# 13. Initialize game state machine (depends on everything)
 	if game_state_machine and game_state_machine.has_method("initialize"):
 		print("Initializing Game State Machine...")
 		game_state_machine.initialize(
 			game_board,
 			weapon_types,
 			weapon_placement,
+			targeting_state,
 			attack_state,
 			game_ui_manager,
 			player_manager
@@ -234,7 +247,7 @@ func initialize_components():
 	else:
 		print("Warning: GameStateMachine not initialized (missing method or node)")
 	
-	# 13. Connect signals between components
+	# 14. Connect signals between components
 	connect_component_signals()
 	
 	print("All components initialized")
@@ -282,6 +295,12 @@ func verify_scripts_attached():
 			push_error("PlacementState is missing its script!")
 			all_scripts_attached = false
 	
+	if targeting_state:
+		print("TargetingState script attached: ", targeting_state.get_script() != null)
+		if !targeting_state.get_script():
+			push_error("TargetingState is missing its script!")
+			all_scripts_attached = false
+	
 	if attack_state:
 		print("AttackState script attached: ", attack_state.get_script() != null)
 		if !attack_state.get_script():
@@ -297,6 +316,60 @@ func connect_component_signals():
 	# Connect end placement button
 	var main_scene = get_tree().current_scene
 	if main_scene and main_scene.has_node("UI/BottomBar/EndPlacementButton"):
+		var end_placement_button = main_scene.get_node("UI/BottomBar/EndPlacementButton")
+		if end_placement_button and game_state_machine and !end_placement_button.is_connected("pressed", Callable(game_state_machine, "placement_completed")):
+			print("Connecting End Placement button to GameStateMachine")
+			end_placement_button.pressed.connect(Callable(game_state_machine, "placement_completed"))
+		else:
+			print("Warning: Could not connect End Placement button")
+	
+	# Connect end targeting button
+	if main_scene and main_scene.has_node("UI/BottomBar/EndTargetingButton"):
+		var end_targeting_button = main_scene.get_node("UI/BottomBar/EndTargetingButton")
+		if end_targeting_button and targeting_state and !end_targeting_button.is_connected("pressed", Callable(targeting_state, "on_end_targeting_button_pressed")):
+			print("Connecting End Targeting button to TargetingState")
+			end_targeting_button.pressed.connect(Callable(targeting_state, "on_end_targeting_button_pressed"))
+		else:
+			print("Warning: Could not connect End Targeting button")
+			
+	# Connect weapon placement signals to game state machine
+	if weapon_placement and game_state_machine:
+		if !weapon_placement.is_connected("weapon_placed", Callable(game_state_machine, "_on_weapon_placed")):
+			weapon_placement.connect("weapon_placed", Callable(game_state_machine, "_on_weapon_placed"))
+		
+		if !weapon_placement.is_connected("resource_updated", Callable(game_state_machine, "_on_resource_updated")):
+			weapon_placement.connect("resource_updated", Callable(game_state_machine, "_on_resource_updated"))
+	
+	# Connect targeting state signals to game state machine
+	if targeting_state and game_state_machine:
+		if !targeting_state.is_connected("targeting_completed", Callable(game_state_machine, "_on_targeting_completed")):
+			targeting_state.connect("targeting_completed", Callable(game_state_machine, "_on_targeting_completed"))
+			print("Connected TargetingState.targeting_completed to GameStateMachine._on_targeting_completed")
+	
+	# Connect targeting manager signals to targeting state
+	if targeting_manager and targeting_state:
+		if !targeting_manager.is_connected("target_selected", Callable(targeting_state, "_on_target_selected")):
+			targeting_manager.connect("target_selected", Callable(targeting_state, "_on_target_selected"))
+			print("Connected TargetingManager.target_selected to TargetingState._on_target_selected")
+	
+	# Connect targeting state signals to main scene for UI updates
+	if main_scene and targeting_state:
+		if !targeting_state.is_connected("player_turn_started", Callable(main_scene, "create_targeting_buttons")):
+			targeting_state.connect("player_turn_started", Callable(main_scene, "create_targeting_buttons"))
+			print("Connected TargetingState.player_turn_started to Main.create_targeting_buttons")
+	
+	# Connect attack state signals
+	if attack_state and targeting_visualization:
+		if !attack_state.is_connected("attack_executed", Callable(targeting_visualization, "_on_attack_executed")):
+			attack_state.connect("attack_executed", Callable(targeting_visualization, "_on_attack_executed"))
+	
+	if attack_state and game_state_machine:
+		if !attack_state.is_connected("attack_completed", Callable(game_state_machine, "_on_attack_completed")):
+			attack_state.connect("attack_completed", Callable(game_state_machine, "_on_attack_completed"))
+	print("Connecting component signals...")
+
+	# Connect end placement button
+	if main_scene and main_scene.has_node("UI/BottomBar/EndPlacementButton"):
 		var end_button = main_scene.get_node("UI/BottomBar/EndPlacementButton")
 		if end_button and game_state_machine and !end_button.is_connected("pressed", Callable(game_state_machine, "placement_completed")):
 			print("Connecting End Placement button to GameStateMachine")
@@ -311,6 +384,24 @@ func connect_component_signals():
 		
 		if !weapon_placement.is_connected("resource_updated", Callable(game_state_machine, "_on_resource_updated")):
 			weapon_placement.connect("resource_updated", Callable(game_state_machine, "_on_resource_updated"))
+	
+	# Connect targeting state signals to game state machine
+	if targeting_state and game_state_machine:
+		if !targeting_state.is_connected("targeting_completed", Callable(game_state_machine, "_on_targeting_completed")):
+			targeting_state.connect("targeting_completed", Callable(game_state_machine, "_on_targeting_completed"))
+			print("Connected TargetingState.targeting_completed to GameStateMachine._on_targeting_completed")
+	
+	# Connect targeting manager signals to targeting state
+	if targeting_manager and targeting_state:
+		if !targeting_manager.is_connected("target_selected", Callable(targeting_state, "_on_target_selected")):
+			targeting_manager.connect("target_selected", Callable(targeting_state, "_on_target_selected"))
+			print("Connected TargetingManager.target_selected to TargetingState._on_target_selected")
+	
+	# Connect targeting state signals to main scene for UI updates
+	if main_scene and targeting_state:
+		if !targeting_state.is_connected("player_turn_started", Callable(main_scene, "create_attack_buttons")):
+			targeting_state.connect("player_turn_started", Callable(main_scene, "create_attack_buttons"))
+			print("Connected TargetingState.player_turn_started to Main.create_attack_buttons")
 	
 	# Connect attack state signals
 	if attack_state and targeting_visualization:

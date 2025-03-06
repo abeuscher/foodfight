@@ -18,7 +18,9 @@ func occupy_cells(grid_position, weapon_data, player_id):
 			if is_valid_cell(cell_pos):
 				board_core.grid[int(cell_pos.x)][int(cell_pos.y)]["occupied_by"] = {
 					"weapon_id": weapon_data.id,
-					"player_id": player_id
+					"weapon_data": weapon_data,
+					"player_id": player_id,
+					"root_position": pos
 				}
 
 # Check if a cell is within grid bounds

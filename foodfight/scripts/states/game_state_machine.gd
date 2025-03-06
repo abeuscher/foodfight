@@ -1,7 +1,7 @@
 extends Node2D
 
 # Game states
-enum GameState {SETUP, PLACEMENT, ATTACK, RESOLUTION}
+enum GameState {SETUP, PLACEMENT, TARGETING, ATTACK, RESOLUTION}
 
 # Current game state
 var current_state = GameState.SETUP
@@ -10,6 +10,7 @@ var current_state = GameState.SETUP
 var game_board
 var weapon_types
 var weapon_placement
+var targeting_state
 var attack_state
 var ui_manager
 var player_manager
@@ -25,13 +26,14 @@ func _ready():
 	print("GameStateMachine ready - waiting for initialization")
 
 # Initialize the state machine with references to all required components
-func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_attack_state, p_ui_manager, p_player_manager):
+func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_targeting_state, p_attack_state, p_ui_manager, p_player_manager):
 	print("Initializing GameStateMachine...")
 	
 	# Store references to components
 	game_board = p_game_board
 	weapon_types = p_weapon_types
 	weapon_placement = p_weapon_placement
+	targeting_state = p_targeting_state
 	attack_state = p_attack_state
 	ui_manager = p_ui_manager
 	player_manager = p_player_manager
@@ -83,9 +85,14 @@ func _process(_delta):
 			# Placement phase logic is handled by signals
 			pass
 			
+		GameState.TARGETING:
+			# Targeting phase logic
+			# Players choose targets for their weapons
+			pass
+			
 		GameState.ATTACK:
 			# Attack phase logic
-			# Players choose targets and execute attacks
+			# Execute the attacks automatically
 			pass
 			
 		GameState.RESOLUTION:
@@ -115,6 +122,12 @@ func change_state(new_state):
 			# Start placement phase for current player
 			if weapon_placement:
 				weapon_placement.start_placement_phase(current_player_index)
+			
+		GameState.TARGETING:
+			print("Starting targeting phase...")
+			# Start the targeting phase
+			if targeting_state:
+				targeting_state.start_targeting_phase()
 			
 		GameState.ATTACK:
 			print("Starting attack phase...")
@@ -196,9 +209,9 @@ func _on_placement_phase_complete(player_id):
 		if weapon_placement:
 			weapon_placement.start_placement_phase(current_player_index)
 		update_ui()
-	# If player 2 (index 1) just finished, move to attack phase
+	# If player 2 (index 1) just finished, move to targeting phase
 	else:
-		change_state(GameState.ATTACK)
+		change_state(GameState.TARGETING)
 
 # Complete the placement phase
 func placement_completed():
@@ -208,6 +221,14 @@ func placement_completed():
 	if current_state == GameState.PLACEMENT and weapon_placement:
 		weapon_placement.end_placement_phase()
 		_on_placement_phase_complete(current_player_index)
+
+# Handle completion of targeting phase
+func _on_targeting_completed():
+	if !is_initialized:
+		return
+		
+	print("Targeting phase completed")
+	change_state(GameState.ATTACK)
 
 # Execute attacks for both players
 func execute_attacks():
@@ -221,14 +242,19 @@ func execute_attacks():
 		change_state(GameState.RESOLUTION)
 		return
 	
-	# Initialize the attack state with game components
-	if game_board and weapon_types:
-		# Attack state should already be initialized by Main
-		
-		# Start the attack phase
-		attack_state.start_attack_phase()
+	if not targeting_state:
+		print("Error: TargetingState not found")
+		change_state(GameState.RESOLUTION)
+		return
+	
+	# Get the queued attacks from targeting phase
+	var queued_attacks = targeting_state.get_queued_attacks()
+	
+	# Pass the queued attacks to the attack state for execution
+	if attack_state.has_method("execute_queued_attacks"):
+		attack_state.execute_queued_attacks(queued_attacks)
 	else:
-		print("Error: Missing components for attack phase")
+		print("Error: AttackState missing execute_queued_attacks method")
 		change_state(GameState.RESOLUTION)
 
 # Handle attack phase completion
