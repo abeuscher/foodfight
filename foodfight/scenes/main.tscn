@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://pdr201r5pdmg"]
+[gd_scene load_steps=15 format=3 uid="uid://pdr201r5pdmg"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_0aq6d"]
 [ext_resource type="PackedScene" uid="uid://c888idx4rii4b" path="res://scenes/game_board.tscn" id="2_irwmq"]
@@ -7,8 +7,13 @@
 [ext_resource type="Script" path="res://scripts/weapons/weapon_placement.gd" id="5_t72fw"]
 [ext_resource type="Script" path="res://scripts/states/game_state_machine.gd" id="6_ioxst"]
 [ext_resource type="Script" path="res://scripts/states/placement_state.gd" id="7_yslxo"]
-[ext_resource type="Script" path="res://scripts/states/attack_state.gd" id="8_cq8mr"]
-[ext_resource type="Script" path="res://scripts/weapons/weapon_visualization.gd" id="9_qvl3r"]
+[ext_resource type="Script" path="res://scripts/states/game_ui_manager.gd" id="8_krxdl"]
+[ext_resource type="Script" path="res://scripts/states/player_manager.gd" id="9_vfjed"]
+[ext_resource type="Script" path="res://scripts/states/attack_state.gd" id="10_wmjgs"]
+[ext_resource type="Script" path="res://scripts/states/weapon_manager.gd" id="11_hxprs"]
+[ext_resource type="Script" path="res://scripts/states/targeting_manager.gd" id="12_rkbwm"]
+[ext_resource type="Script" path="res://scripts/targeting_visualization.gd" id="13_bqrhe"]
+[ext_resource type="Script" path="res://scripts/weapons/weapon_visualization.gd" id="14_lcdmi"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_0aq6d")
@@ -16,11 +21,26 @@ script = ExtResource("1_0aq6d")
 [node name="GameStateMachine" type="Node2D" parent="."]
 script = ExtResource("6_ioxst")
 
+[node name="GameUIManager" type="Node" parent="."]
+script = ExtResource("8_krxdl")
+
+[node name="PlayerManager" type="Node" parent="."]
+script = ExtResource("9_vfjed")
+
 [node name="PlacementState" type="Node" parent="."]
 script = ExtResource("7_yslxo")
 
 [node name="AttackState" type="Node" parent="."]
-script = ExtResource("8_cq8mr")
+script = ExtResource("10_wmjgs")
+
+[node name="WeaponManager" type="Node" parent="AttackState"]
+script = ExtResource("11_hxprs")
+
+[node name="TargetingManager" type="Node" parent="AttackState"]
+script = ExtResource("12_rkbwm")
+
+[node name="TargetingVisualization" type="Node2D" parent="."]
+script = ExtResource("13_bqrhe")
 
 [node name="WeaponTypes" type="Node" parent="."]
 script = ExtResource("4_vkdpj")
@@ -29,7 +49,7 @@ script = ExtResource("4_vkdpj")
 script = ExtResource("5_t72fw")
 
 [node name="WeaponVisualization" type="Node" parent="WeaponPlacement"]
-script = ExtResource("9_qvl3r")
+script = ExtResource("14_lcdmi")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -115,6 +135,20 @@ grow_vertical = 0
 theme = ExtResource("3_4jnuh")
 
 [node name="WeaponButtonsContainer" type="HBoxContainer" parent="UI/BottomBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="AttackButtonsContainer" type="HBoxContainer" parent="UI/BottomBar"]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

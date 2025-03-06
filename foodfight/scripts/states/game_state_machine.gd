@@ -6,82 +6,72 @@ enum GameState {SETUP, PLACEMENT, ATTACK, RESOLUTION}
 # Current game state
 var current_state = GameState.SETUP
 
-# Player information (pulled from GameData singleton)
-var player1_name = ""
-var player2_name = ""
-var current_player = 1  # 1 or 2 for display purposes
-var current_player_index = 0  # 0 or 1 for array indexing
-
-# Player scores
-var player1_score = 0
-var player2_score = 0
-
-# References to UI elements
-var player1_name_label
-var player2_name_label
-var player1_score_label
-var player2_score_label
-var turn_label
-var phase_label
-var resource_label
-var weapon_buttons_container
-
-# Reference to the game board
+# References to game components
 var game_board
-
-# References to weapon systems
 var weapon_types
 var weapon_placement
+var attack_state
+var ui_manager
+var player_manager
+
+# Default player values (in case player_manager isn't ready)
+var current_player_index = 0
+
+# Initialization flag
+var is_initialized = false
 
 func _ready():
-	# Get references to UI elements using the correct paths
-	var main = get_parent()
-	player1_name_label = main.get_node("UI/TopBar/HBoxContainer/Player1Container/NameLabel")
-	player2_name_label = main.get_node("UI/TopBar/HBoxContainer/Player2Container/NameLabel")
-	player1_score_label = main.get_node("UI/TopBar/HBoxContainer/Player1Container/ScoreLabel")
-	player2_score_label = main.get_node("UI/TopBar/HBoxContainer/Player2Container/ScoreLabel")
-	turn_label = main.get_node("UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel")
-	phase_label = main.get_node("UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel")
-	resource_label = main.get_node("UI/TopBar/HBoxContainer/ResourceContainer/ResourceLabel")
-	weapon_buttons_container = main.get_node("UI/BottomBar/WeaponButtonsContainer")
+	# We'll wait for explicit initialization from Main
+	print("GameStateMachine ready - waiting for initialization")
+
+# Initialize the state machine with references to all required components
+func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_attack_state, p_ui_manager, p_player_manager):
+	print("Initializing GameStateMachine...")
 	
-	# Get references to other nodes
-	game_board = main.get_node("GameBoard")
-	weapon_types = main.get_node("WeaponTypes")
-	weapon_placement = main.get_node("WeaponPlacement")
+	# Store references to components
+	game_board = p_game_board
+	weapon_types = p_weapon_types
+	weapon_placement = p_weapon_placement
+	attack_state = p_attack_state
+	ui_manager = p_ui_manager
+	player_manager = p_player_manager
 	
-	# Get player names from GameData singleton
-	player1_name = GameData.player1_name
-	player2_name = GameData.player2_name
+	# Check that all required components are available
+	if !game_board:
+		push_error("GameStateMachine: game_board reference is null")
+		return false
 	
-	# Set player names in UI
-	player1_name_label.text = player1_name
-	player2_name_label.text = player2_name
+	if !weapon_types:
+		push_error("GameStateMachine: weapon_types reference is null")
+		return false
+		
+	if !weapon_placement:
+		push_error("GameStateMachine: weapon_placement reference is null")
+		return false
 	
-	# Initialize game
-	game_board.initialize_grid()
+	# Player manager is optional, we have fallback code
+	if player_manager:
+		current_player_index = player_manager.current_player_index
 	
-	# Initialize weapon systems
-	weapon_placement.initialize(game_board, weapon_types)
+	# Set initialization flag
+	is_initialized = true
+	print("GameStateMachine initialized successfully")
+	return true
+
+# Start the game state machine
+func start_game():
+	if !is_initialized:
+		push_error("Cannot start game - GameStateMachine not initialized")
+		return
 	
-	# Connect weapon placement signals
-	if !weapon_placement.is_connected("weapon_placed", Callable(self, "_on_weapon_placed")):
-		weapon_placement.connect("weapon_placed", Callable(self, "_on_weapon_placed"))
-	if !weapon_placement.is_connected("resource_updated", Callable(self, "_on_resource_updated")):
-		weapon_placement.connect("resource_updated", Callable(self, "_on_resource_updated"))
-	
-	# Connect to the existing EndPlacementButton created in scene
-	var end_placement_button = get_parent().get_node("UI/BottomBar/EndPlacementButton")
-	if end_placement_button and !end_placement_button.is_connected("pressed", Callable(self, "placement_completed")):
-		end_placement_button.pressed.connect(Callable(self, "placement_completed"))
-	
-	# Start in SETUP state and then move to PLACEMENT
+	print("Starting game from GameStateMachine")
+	# Start in SETUP state
 	change_state(GameState.SETUP)
-	
-	# Update UI
-	update_ui()
 
 func _process(_delta):
+	if !is_initialized:
+		return
+		
 	# Game state machine
 	match current_state:
 		GameState.SETUP:
@@ -105,6 +95,10 @@ func _process(_delta):
 
 # Change the game state
 func change_state(new_state):
+	if !is_initialized:
+		push_error("Cannot change state - GameStateMachine not initialized")
+		return
+		
 	current_state = new_state
 	print("Game state changed to: ", GameState.keys()[current_state])
 	
@@ -117,9 +111,10 @@ func change_state(new_state):
 			change_state(GameState.PLACEMENT)
 			
 		GameState.PLACEMENT:
-			print("Starting placement phase for " + _get_current_player_name())
+			print("Starting placement phase for " + get_current_player_name())
 			# Start placement phase for current player
-			weapon_placement.start_placement_phase(current_player_index)
+			if weapon_placement:
+				weapon_placement.start_placement_phase(current_player_index)
 			
 		GameState.ATTACK:
 			print("Starting attack phase...")
@@ -129,142 +124,117 @@ func change_state(new_state):
 		GameState.RESOLUTION:
 			print("Resolving attacks...")
 			# Resolution phase logic will go here
+			await get_tree().create_timer(2.0).timeout
+			# For now, just cycle back to placement phase
+			reset_current_player()
+			change_state(GameState.PLACEMENT)
 	
+	# Update UI for the new state
 	update_ui()
 
-# Switch to the next player
+# Get current player name (fallback if player_manager not available)
+func get_current_player_name():
+	if player_manager and player_manager.has_method("get_current_player_name"):
+		return player_manager.get_current_player_name()
+	else:
+		return "Player " + str(current_player_index + 1)
+
+# Switch to next player (fallback if player_manager not available)
 func next_player():
-	current_player = 2 if current_player == 1 else 1
-	current_player_index = 1 if current_player == 2 else 0
-	print("Current player: " + _get_current_player_name())
+	if player_manager and player_manager.has_method("next_player"):
+		player_manager.next_player()
+		current_player_index = player_manager.current_player_index
+	else:
+		current_player_index = 1 if current_player_index == 0 else 0
 	
-	# If in placement phase, start placement for the new player
-	if current_state == GameState.PLACEMENT:
-		weapon_placement.start_placement_phase(current_player_index)
-	
-	update_ui()
+	print("Current player: " + get_current_player_name())
+
+# Reset to player 1 (fallback if player_manager not available)
+func reset_current_player():
+	if player_manager and player_manager.has_method("reset_current_player"):
+		player_manager.reset_current_player()
+		current_player_index = player_manager.current_player_index
+	else:
+		current_player_index = 0
+
+# Update UI (with safety checks)
+func update_ui():
+	if ui_manager and ui_manager.has_method("update_ui"):
+		ui_manager.update_ui(current_state, current_player_index)
 
 # Handle weapon placement event
 func _on_weapon_placed(player_id, weapon_data, _position):
+	if !is_initialized:
+		return
+		
 	# Add visual feedback or sound effect here
 	print(weapon_data.name + " placed by Player " + str(player_id + 1))
 	
 	# Check if player can continue placing weapons
-	if weapon_placement.get_player_resources(player_id) <= 0:
-		print("Player " + str(player_id + 1) + " has no resources left")
-		_on_placement_phase_complete(player_id)
+	if weapon_placement and weapon_placement.has_method("get_player_resources"):
+		if weapon_placement.get_player_resources(player_id) <= 0:
+			print("Player " + str(player_id + 1) + " has no resources left")
+			_on_placement_phase_complete(player_id)
 
 # Handle resource update
 func _on_resource_updated(player_id, amount):
-	# Update resource display
-	if player_id == current_player_index:
-		resource_label.text = "Resources: " + str(amount)
+	if !is_initialized:
+		return
+		
+	# Update resource display via UI manager
+	if ui_manager and ui_manager.has_method("update_resource_display"):
+		ui_manager.update_resource_display(player_id, amount)
 
 # Handle completion of placement phase for a player
 func _on_placement_phase_complete(player_id):
+	if !is_initialized:
+		return
+		
 	# If player 1 (index 0) just finished, switch to player 2
 	if player_id == 0:
 		next_player()
+		if weapon_placement:
+			weapon_placement.start_placement_phase(current_player_index)
+		update_ui()
 	# If player 2 (index 1) just finished, move to attack phase
 	else:
 		change_state(GameState.ATTACK)
 
-# Get the name of the current player
-func _get_current_player_name():
-	return player1_name if current_player == 1 else player2_name
-
-func update_ui():
-	print("update_ui() called, current_state =", GameState.keys()[current_state])
-	
-	# Debug node paths
-	print("Parent node: ", get_parent().name)
-	print("BottomBar exists: ", get_parent().has_node("UI/BottomBar"))
-	print("EndPlacementButton exists: ", get_parent().has_node("UI/BottomBar/EndPlacementButton"))
-	
-	# If the path is failing, try a different approach
-	var ui_layer = get_parent().get_node("UI")
-	if ui_layer:
-		var bottom_bar = ui_layer.get_node("BottomBar")
-		if bottom_bar:
-			print("Found BottomBar directly")
-			var end_button = bottom_bar.get_node("EndPlacementButton")
-			if end_button:
-				print("Found EndPlacementButton directly")
-				end_button.visible = (current_state == GameState.PLACEMENT)
-				end_button.z_index = 1
-				end_button.modulate = Color(1, 0, 0)  # Bright red
-	
-	# Update score labels
-	player1_score_label.text = "Score: " + str(player1_score)
-	player2_score_label.text = "Score: " + str(player2_score)
-	
-	# Update turn label
-	turn_label.text = _get_current_player_name() + "'s Turn"
-	
-	# Update phase label
-	var phase_text = GameState.keys()[current_state].capitalize() + " Phase"
-	phase_label.text = phase_text
-	
-	# Update resource label if in placement phase
-	if current_state == GameState.PLACEMENT:
-		resource_label.text = "Resources: " + str(weapon_placement.get_player_resources(current_player_index))
-	else:
-		resource_label.text = "Resources: -"
-	
-	# Show/hide weapon buttons based on game state
-	weapon_buttons_container.visible = (current_state == GameState.PLACEMENT)
-	
-	# Show/hide end placement button
-	var end_placement_button = get_parent().get_node("UI/BottomBar/EndPlacementButton")
-	if end_placement_button:
-		end_placement_button.visible = (current_state == GameState.PLACEMENT)
-		print("Found end button")
-		if current_state == GameState.PLACEMENT:
-			# Make it more visible by bringing it to front and coloring it
-			end_placement_button.z_index = 1
-			end_placement_button.modulate = Color(1, 0.8, 0.2) # Make it gold colored to stand out
-			
-# Update player scores
-func update_score(player, points):
-	if player == 1:
-		player1_score += points
-	else:
-		player2_score += points
-	update_ui()
-
 # Complete the placement phase
 func placement_completed():
-	if current_state == GameState.PLACEMENT:
+	if !is_initialized:
+		return
+		
+	if current_state == GameState.PLACEMENT and weapon_placement:
 		weapon_placement.end_placement_phase()
 		_on_placement_phase_complete(current_player_index)
 
 # Execute attacks for both players
 func execute_attacks():
+	if !is_initialized:
+		return
+		
 	print("Executing attacks...")
 	
-	# For now, just wait a bit and move to resolution phase
-	# Since we don't have actual weapons to attack with yet
-	await get_tree().create_timer(2.0).timeout
+	if not attack_state:
+		print("Error: AttackState not found")
+		change_state(GameState.RESOLUTION)
+		return
 	
-	# Move to resolution phase
+	# Initialize the attack state with game components
+	if game_board and weapon_types:
+		# Attack state should already be initialized by Main
+		
+		# Start the attack phase
+		attack_state.start_attack_phase()
+	else:
+		print("Error: Missing components for attack phase")
+		change_state(GameState.RESOLUTION)
+
+# Handle attack phase completion
+func _on_attack_completed():
+	if !is_initialized:
+		return
+		
+	print("Attack phase completed")
 	change_state(GameState.RESOLUTION)
-
-# This will be expanded when we implement the full attack system
-func process_weapon_attack(weapon, player_id):
-	# Placeholder for weapon attack processing
-	pass
-
-# This will be expanded when we implement the full attack system
-func find_targets_for_weapon(weapon, player_id):
-	# Placeholder for finding valid targets
-	return []
-
-# This will be expanded when we implement the full attack system
-func visualize_attack(weapon, target):
-	# Placeholder for attack visualization
-	pass
-
-# This will be expanded when we implement the full attack system
-func apply_damage(weapon, target):
-	# Placeholder for damage application
-	pass
