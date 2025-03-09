@@ -16,6 +16,10 @@ var end_targeting_button
 # Reference to components
 var weapon_placement
 var player_manager
+var weapon_manager
+var targeting_state
+var targeting_manager
+var main_scene
 
 # Initialization flag
 var is_initialized = false
@@ -24,58 +28,136 @@ func _ready():
 	# Wait a frame to ensure all nodes are ready
 	await get_tree().process_frame
 	
+	# Get reference to main scene
+	main_scene = get_parent()
+	
 	# Get references to UI elements
-	var main = get_parent()
-	if main.has_node("UI/TopBar/HBoxContainer/Player1Container/NameLabel"):
-		player1_name_label = main.get_node("UI/TopBar/HBoxContainer/Player1Container/NameLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/Player1Container/NameLabel"):
+		player1_name_label = main_scene.get_node("UI/TopBar/HBoxContainer/Player1Container/NameLabel")
 	
-	if main.has_node("UI/TopBar/HBoxContainer/Player2Container/NameLabel"):
-		player2_name_label = main.get_node("UI/TopBar/HBoxContainer/Player2Container/NameLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/Player2Container/NameLabel"):
+		player2_name_label = main_scene.get_node("UI/TopBar/HBoxContainer/Player2Container/NameLabel")
 	
-	if main.has_node("UI/TopBar/HBoxContainer/Player1Container/ScoreLabel"):
-		player1_score_label = main.get_node("UI/TopBar/HBoxContainer/Player1Container/ScoreLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/Player1Container/ScoreLabel"):
+		player1_score_label = main_scene.get_node("UI/TopBar/HBoxContainer/Player1Container/ScoreLabel")
 	
-	if main.has_node("UI/TopBar/HBoxContainer/Player2Container/ScoreLabel"):
-		player2_score_label = main.get_node("UI/TopBar/HBoxContainer/Player2Container/ScoreLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/Player2Container/ScoreLabel"):
+		player2_score_label = main_scene.get_node("UI/TopBar/HBoxContainer/Player2Container/ScoreLabel")
 	
-	if main.has_node("UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel"):
-		turn_label = main.get_node("UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel"):
+		turn_label = main_scene.get_node("UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel")
 	
-	if main.has_node("UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel"):
-		phase_label = main.get_node("UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel"):
+		phase_label = main_scene.get_node("UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel")
 	
-	if main.has_node("UI/TopBar/HBoxContainer/ResourceContainer/ResourceLabel"):
-		resource_label = main.get_node("UI/TopBar/HBoxContainer/ResourceContainer/ResourceLabel")
+	if main_scene.has_node("UI/TopBar/HBoxContainer/ResourceContainer/ResourceLabel"):
+		resource_label = main_scene.get_node("UI/TopBar/HBoxContainer/ResourceContainer/ResourceLabel")
 	
-	if main.has_node("UI/BottomBar/WeaponButtonsContainer"):
-		weapon_buttons_container = main.get_node("UI/BottomBar/WeaponButtonsContainer")
+	if main_scene.has_node("UI/BottomBar/WeaponButtonsContainer"):
+		weapon_buttons_container = main_scene.get_node("UI/BottomBar/WeaponButtonsContainer")
 	
-	if main.has_node("UI/BottomBar/EndPlacementButton"):
-		end_placement_button = main.get_node("UI/BottomBar/EndPlacementButton")
+	if main_scene.has_node("UI/BottomBar/EndPlacementButton"):
+		end_placement_button = main_scene.get_node("UI/BottomBar/EndPlacementButton")
 	
-	if main.has_node("UI/BottomBar/TargetingButtonsContainer"):
-		targeting_buttons_container = main.get_node("UI/BottomBar/TargetingButtonsContainer")
+	if main_scene.has_node("UI/BottomBar/TargetingButtonsContainer"):
+		targeting_buttons_container = main_scene.get_node("UI/BottomBar/TargetingButtonsContainer")
 	
-	if main.has_node("UI/BottomBar/EndTargetingButton"):
-		end_targeting_button = main.get_node("UI/BottomBar/EndTargetingButton")
+	if main_scene.has_node("UI/BottomBar/EndTargetingButton"):
+		end_targeting_button = main_scene.get_node("UI/BottomBar/EndTargetingButton")
 	
 	# Get references to other nodes
-	if main.has_node("WeaponPlacement"):
-		weapon_placement = main.get_node("WeaponPlacement")
+	if main_scene.has_node("WeaponPlacement"):
+		weapon_placement = main_scene.get_node("WeaponPlacement")
 	
-	if main.has_node("PlayerManager"):
-		player_manager = main.get_node("PlayerManager")
+	if main_scene.has_node("PlayerManager"):
+		player_manager = main_scene.get_node("PlayerManager")
 	
 	is_initialized = true
 	print("UI Manager initialized")
+
+# Ensure we have all needed GameManager components
+func _ensure_game_components():
+	if GameManager:
+		if !weapon_manager:
+			weapon_manager = GameManager.weapon_manager
+			print("UIManager: Got weapon_manager from GameManager")
+			
+		if !targeting_state:
+			targeting_state = GameManager.targeting_state
+			print("UIManager: Got targeting_state from GameManager")
+			
+		if !targeting_manager:
+			targeting_manager = GameManager.targeting_manager
+			print("UIManager: Got targeting_manager from GameManager")
+
+# Handle player turn started in targeting phase
+func handle_player_turn_started(player_id):
+	print("GameUIManager: Player turn started for Player ", player_id + 1)
+	
+	# Make sure we have all needed components
+	_ensure_game_components()
+	
+	# Check if we have all necessary components
+	if !is_initialized or !targeting_buttons_container:
+		print("GameUIManager: Missing UI components for player turn")
+		return
+		
+	if !weapon_manager:
+		print("GameUIManager: Missing weapon_manager for player turn")
+		return
+	
+	print("GameUIManager: Creating buttons for Player ", player_id + 1)
+	
+	# Clear existing buttons
+	for child in targeting_buttons_container.get_children():
+		child.queue_free()
+	
+	# Get player's weapons
+	var weapons = weapon_manager.get_player_weapons(player_id)
+	print("GameUIManager: Found ", weapons.size(), " weapons for Player ", player_id + 1)
+	
+	# Create a button for each weapon
+	for weapon in weapons:
+		var button = Button.new()
+		button.text = weapon.data.name
+		button.tooltip_text = "Range: " + str(weapon.data.attack_range) + "\n" + \
+						   "Damage: " + str(weapon.data.damage) + "\n" + \
+						   "Splash: " + str(weapon.data.splash_radius)
+		
+		# Connect button press to callback in main
+		button.pressed.connect(func(): main_scene._on_targeting_button_pressed(weapon, player_id))
+		
+		# Add to container
+		targeting_buttons_container.add_child(button)
+	
+	# Make container visible
+	targeting_buttons_container.visible = true
+	
+	# Update turn label to show current player
+	if turn_label:
+		turn_label.text = "Player " + str(player_id + 1) + "'s Turn"
+	
+	# Update phase label to show remaining attacks
+	if phase_label:
+		phase_label.text = "Targeting Phase (3 targets left)"
+	
+	# Make sure end targeting button is visible
+	if end_targeting_button:
+		end_targeting_button.visible = true
+		end_targeting_button.text = "End Player " + str(player_id + 1) + "'s Targeting"
 
 # Update UI based on game state
 func update_ui(current_state, current_player_index):
 	if !is_initialized:
 		print("Warning: UI Manager not fully initialized")
 		return
-		
-	var game_state_machine = get_parent().get_node("GameStateMachine")
+	
+	print("GameUIManager: Updating UI - State: ", current_state, ", Player: ", current_player_index + 1)
+	
+	# Ensure we have game components
+	_ensure_game_components()
+	
+	var game_state_machine = main_scene.get_node("GameStateMachine")
 	if !game_state_machine:
 		print("Warning: GameStateMachine not found")
 		return
@@ -123,6 +205,13 @@ func update_ui(current_state, current_player_index):
 		else:
 			resource_label.text = "Resources: -"
 	
+	# Show/hide UI elements based on game state
+	update_ui_visibility(current_state, current_player_index)
+
+# Update visibility of UI elements based on game state
+func update_ui_visibility(current_state, current_player_index):
+	var game_state_machine = main_scene.get_node("GameStateMachine")
+	
 	# Show/hide weapon buttons based on game state
 	if weapon_buttons_container:
 		weapon_buttons_container.visible = (current_state == game_state_machine.GameState.PLACEMENT)
@@ -153,28 +242,6 @@ func update_ui(current_state, current_player_index):
 			# Update button text to show which player is ending targeting
 			end_targeting_button.text = "End " + player_manager.get_current_player_name() + "'s Targeting"
 
-# Connect the end placement button
-func connect_end_placement_button(callback):
-	if !is_initialized:
-		await _ready()
-	
-	if end_placement_button and !end_placement_button.is_connected("pressed", callback):
-		end_placement_button.pressed.connect(callback)
-		print("End placement button connected")
-	else:
-		print("Warning: Could not connect end placement button")
-
-# Connect the end targeting button
-func connect_end_targeting_button(callback):
-	if !is_initialized:
-		await _ready()
-	
-	if end_targeting_button and !end_targeting_button.is_connected("pressed", callback):
-		end_targeting_button.pressed.connect(callback)
-		print("End targeting button connected")
-	else:
-		print("Warning: Could not connect end targeting button")
-
 # Update resource display
 func update_resource_display(player_id, amount):
 	if !is_initialized or !resource_label or !player_manager:
@@ -182,26 +249,3 @@ func update_resource_display(player_id, amount):
 		
 	if player_id == player_manager.current_player_index:
 		resource_label.text = "Resources: " + str(amount)
-
-# Create targeting buttons
-func create_targeting_buttons(player_id, weapons_data, weapon_select_callback):
-	if !is_initialized or !targeting_buttons_container:
-		return
-	
-	# Clear existing buttons
-	for child in targeting_buttons_container.get_children():
-		child.queue_free()
-	
-	# Create a button for each weapon
-	for weapon in weapons_data:
-		var button = Button.new()
-		button.text = weapon.data.name
-		button.tooltip_text = "Range: " + str(weapon.data.attack_range) + "\n" + \
-							  "Damage: " + str(weapon.data.damage) + "\n" + \
-							  "Splash: " + str(weapon.data.splash_radius)
-		
-		# Connect button press to callback
-		button.pressed.connect(func(): weapon_select_callback.call(weapon, player_id))
-		
-		# Add to container
-		targeting_buttons_container.add_child(button)

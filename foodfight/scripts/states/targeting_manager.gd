@@ -11,89 +11,127 @@ var selected_weapon = null
 var targeting_active = false
 var target_position = null
 var valid_targets = []
-
-# Visual indicator
-var range_indicator
+var hover_cell = null
 
 # Initialization flag
 var is_initialized = false
 
 func _ready():
-	await get_tree().process_frame
+	print("TargetingManager: Ready")
 	
-	# Get dependency
+	# Get weapon manager reference
 	if get_parent() and get_parent().has_node("WeaponManager"):
 		weapon_manager = get_parent().get_node("WeaponManager")
+		print("TargetingManager: Found WeaponManager reference")
 	else:
 		print("Error: WeaponManager not found")
-	
-	# Create range indicator
-	range_indicator = RangeIndicatorNode.new()
-	range_indicator.name = "RangeIndicator"
-	add_child(range_indicator)
-	range_indicator.visible = false
 
 func initialize(p_game_board):
+	print("Initializing TargetingManager...")
+	
 	if !p_game_board:
-		print("Error: No game board provided to TargetingManager")
-		return
+		push_error("TargetingManager: No game board provided")
+		return false
 	
 	game_board = p_game_board
+	print("TargetingManager: Game board set")
 	
 	if !weapon_manager:
-		print("Error: WeaponManager not available")
-		return
-		
+		push_error("TargetingManager: WeaponManager not available")
+		return false
+	
 	is_initialized = true
 	print("Targeting manager initialized")
+	return true
 
 # Handle input for targeting
 func handle_input(event):
-	if !is_initialized or not targeting_active:
+	if !is_initialized or !targeting_active or !selected_weapon:
 		return
-		
+	
+	# Handle mouse movement for hover effect
+	if event is InputEventMouseMotion:
+		update_hover_position(event.global_position)
+	
 	# Handle clicking on the game board to select a target
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		print("TargetingManager: Mouse click detected at ", event.global_position)
 		var clicked_cell = game_board.get_cell_at_position(event.global_position)
-		if clicked_cell and is_valid_target(clicked_cell):
-			target_position = clicked_cell.position
-			# Confirm the target
-			confirm_target()
+		if clicked_cell:
+			print("TargetingManager: Cell found at ", clicked_cell.position)
+			if is_valid_target(clicked_cell):
+				print("TargetingManager: Valid target cell selected")
+				target_position = clicked_cell.position
+				
+				# Highlight the selected cell
+				game_board.set_cell_visual_state(clicked_cell.position, game_board.VISUAL_STATE.SELECTED)
+				
+				confirm_target()
+			else:
+				print("TargetingManager: Cell is not a valid target")
+
+# Update hover effect based on mouse position
+func update_hover_position(global_pos):
+	if !game_board or !targeting_active:
+		return
+		
+	var cell = game_board.get_cell_at_position(global_pos)
+	if cell:
+		# Only update if we're hovering over a different cell
+		if hover_cell != cell:
+			hover_cell = cell
+			
+			# Reset previous hover effects
+			game_board.reset_hover_effects()
+			
+			# Set hover effect based on whether it's a valid target
+			if is_valid_target(cell):
+				game_board.set_cell_visual_state(cell.position, game_board.VISUAL_STATE.HOVER_VALID)
+			else:
+				game_board.set_cell_visual_state(cell.position, game_board.VISUAL_STATE.HOVER_INVALID)
+	else:
+		# If mouse is not over any cell, clear the hover effect
+		if hover_cell:
+			hover_cell = null
+			game_board.reset_hover_effects()
 
 # Activate targeting mode
 func activate_targeting():
-	if !is_initialized:
-		return
-		
-	targeting_active = true
+	if is_initialized:
+		targeting_active = true
+		hover_cell = null
+		print("TargetingManager: Targeting mode activated")
 
 # Deactivate targeting mode
 func deactivate_targeting():
-	if !is_initialized:
-		return
-		
-	targeting_active = false
-	clear_targeting_visuals()
+	if is_initialized:
+		targeting_active = false
+		clear_targeting_visuals()
+		print("TargetingManager: Targeting mode deactivated")
 
 # Select a weapon to attack with
 func select_weapon(weapon, player_id):
 	if !is_initialized:
 		return
-		
+	
+	print("TargetingManager: Weapon selected: ", weapon.data.name, " for Player ", player_id + 1)
 	selected_weapon = weapon
 	
 	# Clear any previous targeting visuals
 	clear_targeting_visuals()
 	
-	# Show attack range for selected weapon
+	# Get valid targets for this weapon
 	valid_targets = get_valid_targets(weapon, player_id)
-	show_range_indicator(weapon, valid_targets)
+	print("TargetingManager: Found ", valid_targets.size(), " valid targets")
+	
+	# Don't highlight valid targets by default, only on hover
+	# Let the hover effect handle showing what's valid or not
 
 # Get target for weapon (for automated attacks)
 func get_target_for_weapon(weapon, player_id):
 	if !is_initialized or !weapon_manager:
 		return null
-		
+	
 	var enemy_player_id = 1 - player_id
 	var potential_targets = []
 	
@@ -102,13 +140,8 @@ func get_target_for_weapon(weapon, player_id):
 		if distance <= weapon.data.attack_range:
 			potential_targets.append(target_weapon)
 	
-	# If no targets in range, return null
-	if potential_targets.size() == 0:
-		return null
-	
-	# For now, just pick the first valid target
-	# In the future, you could implement strategic target selection
-	return potential_targets[0]
+	# Return first valid target or null if none
+	return potential_targets[0] if potential_targets.size() > 0 else null
 
 # Calculate distance between two grid positions
 func calculate_distance(pos1, pos2):
@@ -118,62 +151,82 @@ func calculate_distance(pos1, pos2):
 func get_valid_targets(weapon, player_id):
 	if !is_initialized:
 		return []
-		
+	
 	var targets = []
 	var enemy_player_id = 1 - player_id
+	print("TargetingManager: Calculating valid targets for Player ", player_id + 1, " against Player ", enemy_player_id + 1)
+	
+	# Get island dimensions
+	var island_size = game_board.island_size
+	var island_margin = game_board.island_margin
 	
 	# Scan grid for cells in range and on enemy territory
 	for x in range(game_board.grid_size.x):
 		for y in range(game_board.grid_size.y):
 			var cell = game_board.grid[x][y]
 			
-			# Calculate if within range
-			var distance = calculate_distance(weapon.position, cell.position)
-			if distance <= weapon.data.attack_range:
-				# Check if it's enemy territory or has an enemy weapon
-				var is_enemy_territory = (
-					enemy_player_id == 0 and x < game_board.grid_size.x / 2 or
-					enemy_player_id == 1 and x >= game_board.grid_size.x / 2
-				)
+			# Check if it's enemy territory and land
+			var is_enemy_territory = false
+			var is_land = false
+			
+			# Always use cell_manager if available for accurate targeting
+			if game_board.cell_manager:
+				is_enemy_territory = game_board.cell_manager.is_player_territory(cell.position, enemy_player_id)
+				is_land = game_board.cell_manager.is_land_cell(cell.position)
+			else:
+				# Fallback with direct grid checks if cell_manager isn't available
 				
-				if is_enemy_territory:
-					targets.append(cell)
+				# Check for left island (player 0's territory)
+				if enemy_player_id == 0:
+					is_enemy_territory = (
+						x >= island_margin.x and 
+						x < island_margin.x + island_size.x and
+						y >= island_margin.y and 
+						y < island_margin.y + island_size.y
+					)
+				
+				# Check for right island (player 1's territory)
+				else:
+					is_enemy_territory = (
+						x >= game_board.grid_size.x - island_size.x - island_margin.x and
+						x < game_board.grid_size.x - island_margin.x and
+						y >= island_margin.y and
+						y < island_margin.y + island_size.y
+					)
+				
+				is_land = cell.terrain == game_board.TERRAIN.LAND
+			
+			# Only add if it's enemy territory and land
+			if is_enemy_territory and is_land:
+				targets.append(cell.position)
 	
+	print("TargetingManager: Found ", targets.size(), " valid target cells")
 	return targets
 
 # Check if a cell is a valid target
 func is_valid_target(cell):
-	if !is_initialized:
+	if !is_initialized or !cell:
 		return false
-		
-	for valid_cell in valid_targets:
-		if valid_cell.position == cell.position:
+	
+	for valid_pos in valid_targets:
+		if valid_pos == cell.position:
 			return true
 	return false
 
-# Show the range indicator for targeting
-func show_range_indicator(weapon, valid_targets):
-	if !is_initialized or !range_indicator:
-		return
-		
-	range_indicator.set_data(weapon, valid_targets, game_board)
-	range_indicator.visible = true
-
 # Clear targeting visuals
 func clear_targeting_visuals():
-	if !is_initialized:
-		return
-		
-	if range_indicator:
-		range_indicator.visible = false
-	target_position = null
+	hover_cell = null
+	
+	# Reset visual states on the game board
+	if game_board:
+		game_board.reset_all_visual_states()
 
 # Confirm the selected target
 func confirm_target():
-	if !is_initialized or not selected_weapon or not target_position:
+	if !selected_weapon or !target_position:
 		return
 	
-	print("Target confirmed at ", target_position)
+	print("TargetingManager: Target confirmed at ", target_position)
 	
 	# Emit signal that target has been selected
 	emit_signal("target_selected", selected_weapon, target_position)
@@ -181,28 +234,3 @@ func confirm_target():
 	# Reset targeting state
 	clear_targeting_visuals()
 	targeting_active = false
-	selected_weapon = null
-
-# Custom Node2D subclass for range indicator
-class RangeIndicatorNode extends Node2D:
-	var weapon = null
-	var valid_targets = []
-	var board = null
-	
-	func set_data(p_weapon, p_valid_targets, p_board):
-		weapon = p_weapon
-		valid_targets = p_valid_targets
-		board = p_board
-		queue_redraw()
-	
-	func _draw():
-		if not weapon or not board:
-			return
-			
-		for target in valid_targets:
-			var world_pos = board.grid_to_world(target.position)
-			var rect = Rect2(world_pos, board.cell_size)
-			
-			# Draw green highlight for valid targets
-			draw_rect(rect, Color(0, 1, 0, 0.3))
-			draw_rect(rect, Color(0, 1, 0, 0.8), false)

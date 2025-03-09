@@ -12,7 +12,6 @@
 [ext_resource type="Script" uid="uid://bfcvk50ght2rn" path="res://scripts/states/attack_state.gd" id="10_wmjgs"]
 [ext_resource type="Script" uid="uid://duftxnb3se67y" path="res://scripts/states/weapon_manager.gd" id="11_hxprs"]
 [ext_resource type="Script" uid="uid://icjym3lg1p1r" path="res://scripts/states/targeting_manager.gd" id="12_rkbwm"]
-[ext_resource type="Script" uid="uid://0rgsd5y3e1jm" path="res://scripts/targeting_visualization.gd" id="13_bqrhe"]
 [ext_resource type="Script" uid="uid://y054nay23flq" path="res://scripts/weapons/weapon_visualization.gd" id="14_lcdmi"]
 [ext_resource type="Script" path="res://scripts/states/targeting_state.gd" id="15_targst"]
 
@@ -42,9 +41,6 @@ script = ExtResource("11_hxprs")
 
 [node name="TargetingManager" type="Node" parent="AttackState"]
 script = ExtResource("12_rkbwm")
-
-[node name="TargetingVisualization" type="Node2D" parent="."]
-script = ExtResource("13_bqrhe")
 
 [node name="WeaponTypes" type="Node" parent="."]
 script = ExtResource("4_vkdpj")
