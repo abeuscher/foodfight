@@ -12,7 +12,8 @@ export_presets.cfg
 data_*/
 
 # Test logs
-foodfight/logs/
+logs/
+logs/*
 test_results.txt
 *.log
 
