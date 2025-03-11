@@ -14,7 +14,7 @@ var canal_width = 6  # Canal width for separation
 enum TERRAIN {LAND, WATER}
 
 # Visual state types - update to include hover states
-enum VISUAL_STATE {NORMAL, HOVER_VALID, HOVER_INVALID, VALID_TARGET, INVALID_TARGET, SELECTED}
+enum VISUAL_STATE {NORMAL, HOVER_VALID, HOVER_INVALID, VALID_TARGET, INVALID_TARGET, SELECTED, ATTACK_TARGET, DAMAGED}
 
 # Reference to cell manager and visual manager
 @onready var cell_manager
@@ -22,6 +22,12 @@ enum VISUAL_STATE {NORMAL, HOVER_VALID, HOVER_INVALID, VALID_TARGET, INVALID_TAR
 
 # Initialization flag
 var is_initialized = false
+
+# Attack visualization properties
+var active_attacks = []
+var attack_animation_speed = 3.0  # Cells per second
+var targeted_cells = []  # Track cells that have been targeted
+var damage_indicators = []  # Track damage indicators
 
 func _ready():
 	# Wait for child nodes to be ready
@@ -131,9 +137,49 @@ func _draw():
 					# Yellow highlight for selected cells
 					draw_rect(rect, Color(1, 1, 0, 0.4))
 					draw_rect(rect, Color(1, 1, 0, 0.8), false, 2)
+				VISUAL_STATE.ATTACK_TARGET:
+					# Orange highlight for attack targets
+					draw_rect(rect, Color(1, 0.5, 0, 0.5))
+					draw_rect(rect, Color(1, 0.5, 0, 0.9), false, 2)
+				VISUAL_STATE.DAMAGED:
+					# Red pulsing highlight for damaged cells
+					var pulse = (sin(Time.get_ticks_msec() * 0.01) + 1) / 2
+					draw_rect(rect, Color(1, 0, 0, 0.3 + 0.2 * pulse))
+					draw_rect(rect, Color(1, 0, 0, 0.8), false, 2)
 			
 			# Draw grid lines
 			draw_rect(rect, Color.BLACK, false)
+	
+	# Draw attack trajectories and projectiles
+	for attack in active_attacks:
+		if attack.completed:
+			continue
+		
+		var start_world = get_cell_center_world(attack.start)
+		var end_world = get_cell_center_world(attack.end)
+		
+		# Draw trajectory line
+		draw_line(start_world, end_world, Color(1.0, 0.5, 0.0, 0.4), 2.0)
+		
+		# Calculate current position
+		var t = attack.progress
+		var current_world = start_world.lerp(end_world, t)
+		
+		# Draw projectile as a circle
+		draw_circle(current_world, 5.0, Color(1.0, 0.5, 0.0))
+	
+	# Draw damage indicators
+	for indicator in damage_indicators:
+		if indicator.active:
+			var pos = get_cell_center_world(indicator.position)
+			var font_size = 16
+			var damage_text = str(int(indicator.damage))
+			
+			# Create a dynamic font for damage numbers
+			var label_pos = Vector2(pos.x - font_size/2, pos.y - indicator.offset)
+			
+			# Draw damage number
+			draw_string(ThemeDB.fallback_font, label_pos, damage_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color(1, 0, 0))
 
 # Function to get cell at world position
 func get_cell_at_position(world_position):
@@ -210,3 +256,102 @@ func reset_hover_effects():
 			   grid[x][y].get("visual_state", VISUAL_STATE.NORMAL) == VISUAL_STATE.HOVER_INVALID:
 				grid[x][y]["visual_state"] = VISUAL_STATE.NORMAL
 	queue_redraw()
+
+# Add a cell to the targeted list
+func add_targeted_cell(grid_position):
+	if not grid_position in targeted_cells:
+		targeted_cells.append(grid_position)
+		set_cell_visual_state(grid_position, VISUAL_STATE.ATTACK_TARGET)
+
+# Clear all targeted cells
+func clear_targeted_cells():
+	for pos in targeted_cells:
+		set_cell_visual_state(pos, VISUAL_STATE.NORMAL)
+	targeted_cells = []
+
+# Process function to animate attacks
+func _process(delta):
+	# Update active attacks
+	var i = 0
+	while i < active_attacks.size():
+		var attack = active_attacks[i]
+		
+		# Update progress
+		attack.progress += delta * attack_animation_speed
+		
+		# Check if attack completed
+		if attack.progress >= 1.0:
+			attack.progress = 1.0
+			attack.completed = true
+			
+			# Show impact at target position
+			show_impact(attack.end, attack.damage)
+			
+			# Remove completed attack
+			active_attacks.remove_at(i)
+		else:
+			i += 1
+	
+	# Update damage indicators
+	i = 0
+	while i < damage_indicators.size():
+		var indicator = damage_indicators[i]
+		
+		# Update lifetime
+		indicator.lifetime -= delta
+		indicator.offset += delta * 20  # Float upward
+		
+		# Remove expired indicators
+		if indicator.lifetime <= 0:
+			damage_indicators.remove_at(i)
+		else:
+			i += 1
+	
+	# Request redraw if we have active animations
+	if active_attacks.size() > 0 or damage_indicators.size() > 0:
+		queue_redraw()
+
+# Create an attack visualization
+func visualize_attack(attacker_position, target_position, damage):
+	var attack = {
+		"start": attacker_position,
+		"end": target_position,
+		"progress": 0.0,
+		"damage": damage,
+		"completed": false
+	}
+	
+	# Add to active attacks array
+	active_attacks.append(attack)
+	
+	# Highlight target cell
+	set_cell_visual_state(target_position, VISUAL_STATE.ATTACK_TARGET)
+	
+	# Request redraw to show the attack immediately
+	queue_redraw()
+
+# Show impact effect at a position
+func show_impact(position, damage):
+	# Set cell to damaged state temporarily
+	set_cell_visual_state(position, VISUAL_STATE.DAMAGED)
+	
+	# Create a damage indicator
+	damage_indicators.append({
+		"position": position,
+		"damage": damage,
+		"lifetime": 1.5,  # Show for 1.5 seconds
+		"offset": 0,      # Initial vertical offset
+		"active": true
+	})
+	
+	# Reset cell visual state after a delay
+	await get_tree().create_timer(0.5).timeout
+	
+	# Only reset if it's still in damaged state (might have been changed since)
+	if is_initialized:
+		var x = int(position.x)
+		var y = int(position.y)
+		if x >= 0 and x < grid_size.x and y >= 0 and y < grid_size.y:
+			if grid[x][y]["visual_state"] == VISUAL_STATE.DAMAGED:
+				grid[x][y]["visual_state"] = VISUAL_STATE.NORMAL
+				queue_redraw()

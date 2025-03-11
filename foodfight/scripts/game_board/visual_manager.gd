@@ -5,8 +5,10 @@ extends Node
 # Reference to weapon types system
 var weapon_types
 
-# Dictionary to store weapon sprites
+# Dictionaries to store weapon visuals
 var weapon_sprites = {}
+var health_bars = {}
+var max_health = 10.0  # Default max health
 
 # Add this function to visual_manager.gd
 func initialize(weapon_types_ref):
@@ -24,6 +26,12 @@ func clear_weapon_sprites():
 		if is_instance_valid(sprite):
 			sprite.queue_free()
 	weapon_sprites.clear()
+	
+	# Also clear health bars
+	for bar in health_bars.values():
+		if is_instance_valid(bar.container):
+			bar.container.queue_free()
+	health_bars.clear()
 
 # Create a visual sprite for the weapon
 func create_weapon_sprite(weapon_id, grid_position, player_id):
@@ -63,6 +71,9 @@ func create_weapon_sprite(weapon_id, grid_position, player_id):
 	# Store sprite for reference
 	weapon_sprites[instance_id] = sprite
 	
+	# Create health bar for this weapon
+	create_health_bar(instance_id, grid_position, weapon)
+	
 	return sprite
 
 # Create a placement preview for when the player is placing weapons
@@ -85,3 +96,135 @@ func create_placement_preview(weapon_data, grid_position, is_valid):
 		preview.color = Color(1, 0, 0, 0.3)  # Red for invalid placement
 	
 	return preview
+
+# Create a health bar for a weapon
+func create_health_bar(instance_id, grid_position, weapon_data):
+	# Create container for health bar
+	var container = Control.new()
+	board_core.add_child(container)
+	
+	# Position at the top of the weapon sprite
+	var world_pos = board_core.grid_to_world(grid_position)
+	
+	# For multi-cell weapons, adjust position
+	var weapon_width = weapon_data.size.x * board_core.cell_size.x
+	
+	container.position = Vector2(
+		world_pos.x + (weapon_width - 20) / 2,  # Center the health bar
+		world_pos.y - 10  # Position above the weapon
+	)
+	
+	# Create health bar background
+	var background = ColorRect.new()
+	background.size = Vector2(20, 4)  # Small horizontal bar
+	background.color = Color(0.2, 0.2, 0.2, 0.8)
+	container.add_child(background)
+	
+	# Create health bar fill
+	var fill = ColorRect.new()
+	fill.size = Vector2(20, 4)
+	fill.color = Color(0, 1, 0, 0.8)  # Green for full health
+	container.add_child(fill)
+	
+	# Store health bar components
+	health_bars[instance_id] = {
+		"container": container,
+		"background": background,
+		"fill": fill,
+		"current_health": max_health,
+		"max_health": max_health
+	}
+
+# Update health bar for a specific weapon
+func update_health_bar(instance_id, health):
+	if instance_id in health_bars:
+		var bar = health_bars[instance_id]
+		
+		# Update health value
+		bar.current_health = health
+		
+		# Calculate health percentage
+		var health_percent = clamp(health / bar.max_health, 0.0, 1.0)
+		
+		# Update health bar fill
+		bar.fill.size.x = 20 * health_percent
+		
+		# Set color based on health percentage
+		if health_percent > 0.6:
+			bar.fill.color = Color(0, 1, 0, 0.8)  # Green for high health
+		elif health_percent > 0.3:
+			bar.fill.color = Color(1, 1, 0, 0.8)  # Yellow for medium health
+		else:
+			bar.fill.color = Color(1, 0, 0, 0.8)  # Red for low health
+		
+		# Make health bar visible
+		bar.container.visible = true
+
+# Get health bar for a weapon
+func get_health_bar(instance_id):
+	if instance_id in health_bars:
+		return health_bars[instance_id]
+	return null
+
+# Remove a health bar
+func remove_health_bar(instance_id):
+	if instance_id in health_bars:
+		var bar = health_bars[instance_id]
+		if is_instance_valid(bar.container):
+			bar.container.queue_free()
+		health_bars.erase(instance_id)
+
+# Update all weapon sprites and health bars on the board
+func update_weapon_sprites():
+	# This function is called after changes to weapons on the board
+	if !board_core or !board_core.is_initialized:
+		return
+	
+	# Clear existing sprites
+	clear_weapon_sprites()
+	
+	# Create sprites for all weapons on the board
+	for x in range(board_core.grid_size.x):
+		for y in range(board_core.grid_size.y):
+			var cell = board_core.grid[x][y]
+			
+			if cell.occupied_by and "weapon_data" in cell.occupied_by:
+				var weapon_entry = cell.occupied_by
+				
+				# Only create sprite for the root cell of the weapon
+				if weapon_entry.root_position == cell.position:
+					var weapon_id = weapon_entry.weapon_data.id
+					var player_id = weapon_entry.player_id
+					
+					# Create sprite
+					create_weapon_sprite(weapon_id, cell.position, player_id)
+
+# Create attack animation
+func create_attack_animation(attacker_position, target_position, damage):
+	board_core.visualize_attack(attacker_position, target_position, damage)
+
+# Show damage on a weapon
+func show_weapon_damage(weapon, damage):
+	if !weapon or !("data" in weapon) or !("position" in weapon) or !("player_id" in weapon):
+		return
+	
+	# Create instance ID to find the health bar
+	var weapon_id
+	
+	# Handle different ways to get the weapon ID
+	if weapon.data is Object:
+		if weapon.data.has_method("get_id"):
+			weapon_id = weapon.data.get_id()
+		elif "id" in weapon.data:
+			weapon_id = weapon.data.id
+	else:
+		# Fallback
+		weapon_id = "unknown"
+	
+	var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
+	
+	# Update health bar
+	update_health_bar(instance_id, weapon.health)
+	
+	# Show damage indicator on the grid
+	board_core.show_impact(weapon.position, damage)

@@ -19,6 +19,7 @@ var player_manager
 var weapon_manager
 var targeting_state
 var targeting_manager
+var weapon_types
 var main_scene
 
 # Initialization flag
@@ -72,6 +73,9 @@ func _ready():
 	if main_scene.has_node("PlayerManager"):
 		player_manager = main_scene.get_node("PlayerManager")
 	
+	if main_scene.has_node("WeaponTypes"):
+		weapon_types = main_scene.get_node("WeaponTypes")
+	
 	is_initialized = true
 	print("UI Manager initialized")
 
@@ -89,6 +93,10 @@ func _ensure_game_components():
 		if !targeting_manager:
 			targeting_manager = GameManager.targeting_manager
 			print("UIManager: Got targeting_manager from GameManager")
+			
+		if !weapon_types:
+			weapon_types = GameManager.weapon_types
+			print("UIManager: Got weapon_types from GameManager")
 
 # Handle player turn started in targeting phase
 func handle_player_turn_started(player_id):
@@ -146,6 +154,57 @@ func handle_player_turn_started(player_id):
 		end_targeting_button.visible = true
 		end_targeting_button.text = "End Player " + str(player_id + 1) + "'s Targeting"
 
+# Create base placement UI
+func create_base_placement_ui(player_id):
+	if !is_initialized or !weapon_buttons_container or !weapon_types:
+		print("GameUIManager: Missing components for base placement UI")
+		return
+	
+	print("GameUIManager: Creating base placement UI for Player ", player_id + 1)
+	
+	# Clear existing buttons
+	for child in weapon_buttons_container.get_children():
+		child.queue_free()
+	
+	# Get the base weapon type
+	var base_weapon = weapon_types.get_base_weapon()
+	if !base_weapon:
+		print("GameUIManager: No base weapon type found")
+		return
+	
+	# Create a button for placing the base
+	var button = Button.new()
+	button.text = base_weapon.name
+	button.tooltip_text = "Size: " + str(base_weapon.size.x) + "x" + str(base_weapon.size.y) + "\n" + \
+					   "Your main base. Protect it at all costs!"
+	
+	# Style the button to make it prominent
+	button.custom_minimum_size = Vector2(180, 40)
+	button.modulate = Color(1, 0.8, 0.2)  # Gold color
+	
+	# Connect button press to select base for placement
+	button.pressed.connect(func(): _on_base_button_pressed(base_weapon.id, player_id))
+	
+	# Add to container
+	weapon_buttons_container.add_child(button)
+	
+	# Make container visible
+	weapon_buttons_container.visible = true
+	
+	# Set up end placement button
+	if end_placement_button and player_manager:
+		end_placement_button.visible = true
+		end_placement_button.text = "End Base Placement"
+		end_placement_button.z_index = 1
+
+# Handle base button pressed
+func _on_base_button_pressed(base_id, player_id):
+	if !is_initialized or !weapon_placement:
+		return
+	
+	print("GameUIManager: Base button pressed for Player ", player_id + 1)
+	weapon_placement.select_weapon_for_placement(base_id)
+
 # Update UI based on game state
 func update_ui(current_state, current_player_index):
 	if !is_initialized:
@@ -189,8 +248,10 @@ func update_ui(current_state, current_player_index):
 		match current_state:
 			game_state_machine.GameState.SETUP:
 				phase_label.add_theme_color_override("font_color", Color(0.5, 0.5, 1.0))  # Blue for setup
-			game_state_machine.GameState.PLACEMENT:
-				phase_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.2))  # Green for placement
+			game_state_machine.GameState.BASE_PLACEMENT:
+				phase_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.8))  # Pink for base placement
+			game_state_machine.GameState.WEAPON_PLACEMENT:
+				phase_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.2))  # Green for weapon placement
 			game_state_machine.GameState.TARGETING:
 				phase_label.add_theme_color_override("font_color", Color(0.9, 0.6, 0.1))  # Orange for targeting
 			game_state_machine.GameState.ATTACK:
@@ -200,13 +261,19 @@ func update_ui(current_state, current_player_index):
 	
 	# Update resource label if in placement phase
 	if resource_label and weapon_placement:
-		if current_state == game_state_machine.GameState.PLACEMENT:
+		if current_state == game_state_machine.GameState.WEAPON_PLACEMENT:
 			resource_label.text = "Resources: " + str(weapon_placement.get_player_resources(current_player_index))
+		elif current_state == game_state_machine.GameState.BASE_PLACEMENT:
+			resource_label.text = "Base Placement - No Cost"
 		else:
 			resource_label.text = "Resources: -"
 	
 	# Show/hide UI elements based on game state
 	update_ui_visibility(current_state, current_player_index)
+	
+	# Special handling for base placement phase
+	if current_state == game_state_machine.GameState.BASE_PLACEMENT:
+		create_base_placement_ui(current_player_index)
 
 # Update visibility of UI elements based on game state
 func update_ui_visibility(current_state, current_player_index):
@@ -214,7 +281,10 @@ func update_ui_visibility(current_state, current_player_index):
 	
 	# Show/hide weapon buttons based on game state
 	if weapon_buttons_container:
-		weapon_buttons_container.visible = (current_state == game_state_machine.GameState.PLACEMENT)
+		weapon_buttons_container.visible = (
+			current_state == game_state_machine.GameState.WEAPON_PLACEMENT or 
+			current_state == game_state_machine.GameState.BASE_PLACEMENT
+		)
 	
 	# Show/hide targeting buttons based on game state
 	if targeting_buttons_container:
@@ -222,14 +292,20 @@ func update_ui_visibility(current_state, current_player_index):
 	
 	# Show/hide end placement button
 	if end_placement_button and player_manager:
-		end_placement_button.visible = (current_state == game_state_machine.GameState.PLACEMENT)
-		if current_state == game_state_machine.GameState.PLACEMENT:
+		end_placement_button.visible = (
+			current_state == game_state_machine.GameState.WEAPON_PLACEMENT or 
+			current_state == game_state_machine.GameState.BASE_PLACEMENT
+		)
+		
+		if current_state == game_state_machine.GameState.WEAPON_PLACEMENT:
 			# Make it more visible by bringing it to front and styling it
 			end_placement_button.z_index = 1
 			end_placement_button.modulate = Color(1, 0.8, 0.2)  # Gold color to stand out
 			
 			# Update button text to show which player is ending placement
 			end_placement_button.text = "End " + player_manager.get_current_player_name() + "'s Placement"
+		elif current_state == game_state_machine.GameState.BASE_PLACEMENT:
+			end_placement_button.text = "End Base Placement"
 	
 	# Show/hide end targeting button
 	if end_targeting_button and player_manager:

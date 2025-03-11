@@ -6,6 +6,7 @@ var visual_manager
 
 # Weapon tracking
 var player_weapons = [[], []]  # Stores active weapons for each player
+var default_health = 10  # Default health for weapons
 
 # Initialization flag
 var is_initialized = false
@@ -40,11 +41,35 @@ func collect_weapons():
 				# Only add the root cell of a weapon (to avoid duplicates)
 				if weapon_entry.root_position == cell.position:
 					if "player_id" in weapon_entry:
+						# Set health based on weapon type
+						var health = default_health
+						
+						# Check if the weapon is a base by examining the id
+						var is_base = false
+						if weapon_entry.weapon_data is Object:
+							# Try to check for a type property or method
+							if weapon_entry.weapon_data.has_method("get_type"):
+								is_base = weapon_entry.weapon_data.get_type() == "base"
+							elif weapon_entry.weapon_data.has_method("get_id"):
+								var id = str(weapon_entry.weapon_data.get_id()).to_lower()
+								is_base = id.contains("base")
+							# Fall back to checking the id property
+							elif "id" in weapon_entry.weapon_data:
+								var id = str(weapon_entry.weapon_data.id).to_lower()
+								is_base = id.contains("base")
+						elif "type" in weapon_entry.weapon_data:
+							is_base = weapon_entry.weapon_data.type == "base"
+						
+						# Bases have much higher health
+						if is_base:
+							health = default_health * 10  # Increased from 2x to 10x
+						
 						player_weapons[weapon_entry.player_id].append({
 							"data": weapon_entry.weapon_data,
 							"position": cell.position,
 							"current_cooldown": 0,
-							"health": 10,  # Assuming default health
+							"health": health,
+							"max_health": health,
 							"player_id": weapon_entry.player_id  # Save player ID for reference
 						})
 	
@@ -94,12 +119,34 @@ func get_weapon_at_position(position, player_id = -1):
 func remove_weapon_from_board(weapon):
 	if !is_initialized or !weapon:
 		return
-		
+	
+	print("Removing weapon from board: ", weapon.data.name, " at position ", weapon.position)
+	
 	# Find the weapon in the grid and remove it
 	for x in range(game_board.grid_size.x):
 		for y in range(game_board.grid_size.y):
 			var cell = game_board.grid[x][y]
 			if cell.occupied_by and "root_position" in cell.occupied_by and cell.occupied_by.root_position == weapon.position:
+				# Create instance ID to find the health bar
+				var weapon_id
+				
+				# Handle different ways to get the weapon ID
+				if weapon.data is Object:
+					if weapon.data.has_method("get_id"):
+						weapon_id = weapon.data.get_id()
+					elif "id" in weapon.data:
+						weapon_id = weapon.data.id
+				else:
+					# Fallback
+					weapon_id = "unknown"
+					
+				var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
+				
+				# Remove health bar first if visual manager is available
+				if visual_manager:
+					visual_manager.remove_health_bar(instance_id)
+				
+				# Clear cell
 				cell.occupied_by = null
 	
 	# Remove from player_weapons array
@@ -114,3 +161,26 @@ func remove_weapon_from_board(weapon):
 	# Update visuals
 	if visual_manager:
 		visual_manager.update_weapon_sprites()
+
+# Update health display for a weapon
+func update_weapon_health_display(weapon):
+	if !is_initialized or !visual_manager or !weapon:
+		return
+	
+	# Create instance ID to find the health bar
+	var weapon_id
+	
+	# Handle different ways to get the weapon ID
+	if weapon.data is Object:
+		if weapon.data.has_method("get_id"):
+			weapon_id = weapon.data.get_id()
+		elif "id" in weapon.data:
+			weapon_id = weapon.data.id
+	else:
+		# Fallback
+		weapon_id = "unknown"
+		
+	var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
+	
+	# Update health bar
+	visual_manager.update_health_bar(instance_id, weapon.health)

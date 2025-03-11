@@ -225,9 +225,22 @@ func connect_ui_buttons(main_scene):
 	# End placement button
 	if main_scene.has_node("UI/BottomBar/EndPlacementButton") and game_state_machine:
 		var end_placement_button = main_scene.get_node("UI/BottomBar/EndPlacementButton")
-		if !end_placement_button.is_connected("pressed", Callable(game_state_machine, "placement_completed")):
-			end_placement_button.pressed.connect(Callable(game_state_machine, "placement_completed"))
-			print("Connected End Placement button")
+		# Disconnect any existing connections to avoid duplicates
+		if end_placement_button.is_connected("pressed", Callable(game_state_machine, "placement_completed")):
+			end_placement_button.disconnect("pressed", Callable(game_state_machine, "placement_completed"))
+		
+		# Connect to the appropriate handler based on current state
+		end_placement_button.pressed.connect(func():
+			if game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT:
+				var current_player = game_state_machine.current_player_index
+				game_state_machine._on_base_placement_complete(current_player)
+			elif game_state_machine.current_state == game_state_machine.GameState.WEAPON_PLACEMENT:
+				game_state_machine.placement_completed()
+			else:
+				# Fallback for any other state
+				game_state_machine.placement_completed()
+		)
+		print("Connected End Placement button")
 	
 	# End targeting button
 	if main_scene.has_node("UI/BottomBar/EndTargetingButton") and targeting_state:
@@ -260,6 +273,12 @@ func connect_gameplay_signals():
 	if attack_state and game_state_machine:
 		if !attack_state.is_connected("attack_completed", Callable(game_state_machine, "_on_attack_completed")):
 			attack_state.connect("attack_completed", Callable(game_state_machine, "_on_attack_completed"))
+			
+		# Connect points awarded signal to player manager
+		if player_manager and attack_state.has_signal("points_awarded"):
+			if !attack_state.is_connected("points_awarded", Callable(player_manager, "add_points")):
+				attack_state.connect("points_awarded", Callable(player_manager, "add_points"))
+				print("Connected AttackState.points_awarded to PlayerManager.add_points")
 
 # Start the game
 func start_game():

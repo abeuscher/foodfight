@@ -64,7 +64,7 @@ func _input(event):
 	
 	# Forward input to appropriate state handlers
 	match game_state_machine.current_state:
-		game_state_machine.GameState.PLACEMENT:
+		game_state_machine.GameState.WEAPON_PLACEMENT, game_state_machine.GameState.BASE_PLACEMENT:
 			if GameManager.placement_state:
 				GameManager.placement_state.handle_input(event)
 				
@@ -104,7 +104,7 @@ func update_game_ui(current_state):
 	
 	# Configure UI for current state
 	match current_state:
-		game_state_machine.GameState.PLACEMENT:
+		game_state_machine.GameState.WEAPON_PLACEMENT, game_state_machine.GameState.BASE_PLACEMENT:
 			print("Updating UI for placement state")
 			if weapon_buttons_container:
 				weapon_buttons_container.visible = true

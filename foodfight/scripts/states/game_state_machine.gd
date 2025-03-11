@@ -1,10 +1,11 @@
 extends Node2D
 
 # Game states
-enum GameState {SETUP, PLACEMENT, TARGETING, ATTACK, RESOLUTION}
+enum GameState {SETUP, BASE_PLACEMENT, WEAPON_PLACEMENT, TARGETING, ATTACK, RESOLUTION, GAME_OVER}
 
 # Signals
 signal state_changed(new_state)
+signal game_over(winning_player)
 
 # Current game state
 var current_state = GameState.SETUP
@@ -20,6 +21,9 @@ var player_manager
 
 # Default player values
 var current_player_index = 0
+
+# Track if base placement has been completed
+var base_placement_done = false
 
 # Initialization flag
 var is_initialized = false
@@ -45,9 +49,17 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_targeting_st
 		push_error("GameStateMachine: Missing critical components")
 		return false
 	
+	# Connect attack state signals
+	if attack_state:
+		attack_state.connect("attack_completed", Callable(self, "_on_attack_completed"))
+		attack_state.connect("points_awarded", Callable(self, "_on_points_awarded"))
+	
 	# Get player index if player manager is available
 	if player_manager:
 		current_player_index = player_manager.current_player_index
+	
+	# Reset base placement flag
+	base_placement_done = false
 	
 	is_initialized = true
 	print("GameStateMachine initialized successfully")
@@ -78,12 +90,27 @@ func change_state(new_state):
 		GameState.SETUP:
 			print("Setting up the game...")
 			await get_tree().create_timer(0.5).timeout
-			change_state(GameState.PLACEMENT)
 			
-		GameState.PLACEMENT:
-			print("Starting placement phase for " + get_current_player_name())
+			# Go to base placement only if not done yet
+			if !base_placement_done:
+				change_state(GameState.BASE_PLACEMENT)
+			else:
+				change_state(GameState.WEAPON_PLACEMENT)
+			
+		GameState.BASE_PLACEMENT:
+			print("Starting base placement phase for " + get_current_player_name())
+			if weapon_placement:
+				# Start placement phase with special base placement flag
+				weapon_placement.start_base_placement_phase(current_player_index)
+			
+		GameState.WEAPON_PLACEMENT:
+			print("Starting weapon placement phase for " + get_current_player_name())
 			if weapon_placement:
 				weapon_placement.start_placement_phase(current_player_index)
+				
+			# Force refresh of the placement state
+			if GameManager.placement_state:
+				GameManager.placement_state._create_weapon_buttons()
 			
 		GameState.TARGETING:
 			print("Starting targeting phase...")
@@ -104,9 +131,16 @@ func change_state(new_state):
 			
 		GameState.RESOLUTION:
 			print("Resolving attacks...")
-			await get_tree().create_timer(2.0).timeout
-			reset_current_player()
-			change_state(GameState.PLACEMENT)
+			# Check for game over condition
+			check_game_over()
+			
+		GameState.GAME_OVER:
+			print("Game over!")
+			# Display game over screen or message
+			if player_manager:
+				var winner_name = "Player " + str(player_manager.winning_player + 1)
+				emit_signal("game_over", player_manager.winning_player)
+				print(winner_name + " has won the game!")
 	
 	# Update UI for the new state
 	update_ui()
@@ -160,6 +194,27 @@ func _on_resource_updated(player_id, amount):
 	if ui_manager:
 		ui_manager.update_resource_display(player_id, amount)
 
+# Handle completion of base placement phase for a player
+func _on_base_placement_complete(player_id):
+	if !is_initialized:
+		return
+		
+	print("Base placement completed for Player ", player_id + 1)
+	
+	# If player 1 (index 0) just finished, switch to player 2
+	if player_id == 0:
+		next_player()
+		if weapon_placement:
+			weapon_placement.start_base_placement_phase(current_player_index)
+		update_ui()
+	# If player 2 (index 1) just finished, move to regular placement phase
+	else:
+		# Mark base placement as completed
+		base_placement_done = true
+		# Start with player 1 for the regular placement phase
+		reset_current_player()
+		change_state(GameState.WEAPON_PLACEMENT)
+
 # Handle completion of placement phase for a player
 func _on_placement_phase_complete(player_id):
 	if !is_initialized:
@@ -180,9 +235,12 @@ func placement_completed():
 	if !is_initialized:
 		return
 		
-	if current_state == GameState.PLACEMENT and weapon_placement:
+	if current_state == GameState.WEAPON_PLACEMENT and weapon_placement:
 		weapon_placement.end_placement_phase()
 		_on_placement_phase_complete(current_player_index)
+	elif current_state == GameState.BASE_PLACEMENT and weapon_placement:
+		weapon_placement.end_placement_phase()
+		_on_base_placement_complete(current_player_index)
 
 # Handle completion of targeting phase
 func _on_targeting_completed(player_id, selected_weapons, targets):
@@ -225,3 +283,42 @@ func _on_attack_completed():
 		
 	print("Attack phase completed")
 	change_state(GameState.RESOLUTION)
+
+# Handle points awarded to a player
+func _on_points_awarded(player_id, points):
+	if !is_initialized or !player_manager:
+		return
+		
+	# Award points to the player
+	player_manager.add_points(player_id, points)
+	
+	# Update UI with new scores
+	if ui_manager:
+		ui_manager.update_ui(current_state, current_player_index)
+
+# Check for game over condition
+func check_game_over():
+	if !is_initialized or !attack_state:
+		await get_tree().create_timer(1.0).timeout
+		change_state(GameState.WEAPON_PLACEMENT)
+		return
+	
+	# Check if either player has won
+	var winner = attack_state.check_game_over()
+	
+	if winner >= 0:
+		# We have a winner!
+		if player_manager:
+			# Check if set_winner exists before calling it
+			if player_manager.has_method("set_winner"):
+				player_manager.set_winner(winner)
+			else:
+				# Fallback if set_winner doesn't exist
+				print("Player ", winner + 1, " has won the game!")
+				
+		change_state(GameState.GAME_OVER)
+	else:
+		# Continue to next round - explicitly go to WEAPON_PLACEMENT (not BASE_PLACEMENT)
+		await get_tree().create_timer(1.0).timeout
+		reset_current_player()
+		change_state(GameState.WEAPON_PLACEMENT)

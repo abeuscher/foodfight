@@ -10,6 +10,9 @@ var current_player_index = 0  # 0 or 1 for array indexing
 var player1_score = 0
 var player2_score = 0
 
+# Game result
+var winning_player = -1  # -1 = no winner yet, 0 = player 1, 1 = player 2
+
 # Initialization flag
 var is_initialized = false
 
@@ -81,3 +84,42 @@ func update_score(player, points):
 		player1_score += points
 	else:
 		player2_score += points
+
+# Add points to a player's score
+func add_points(player_id, points):
+	if !is_initialized:
+		return
+	
+	if player_id == 0:
+		player1_score += points
+		print("Added ", points, " points to Player 1. New score: ", player1_score)
+	else:
+		player2_score += points
+		print("Added ", points, " points to Player 2. New score: ", player2_score)
+
+# Set the winning player
+func set_winner(player_id):
+	if !is_initialized:
+		return
+	
+	winning_player = player_id
+	var winner_name = get_player_name(player_id)
+	print("Game over! ", winner_name, " wins with a score of ", 
+		player1_score if player_id == 0 else player2_score)
+
+# Reset the game state
+func reset_game():
+	if !is_initialized:
+		return
+	
+	# Reset scores
+	player1_score = 0
+	player2_score = 0
+	
+	# Reset player turn
+	reset_current_player()
+	
+	# Reset game result
+	winning_player = -1
+	
+	print("Game reset. Starting fresh game between ", player1_name, " and ", player2_name)

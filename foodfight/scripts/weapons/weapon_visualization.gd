@@ -54,3 +54,15 @@ func hide_preview():
 # Create a weapon sprite on the board
 func place_weapon_visual(weapon_data, grid_position, player_id):
 	return visual_manager.create_weapon_sprite(weapon_data.id, grid_position, player_id)
+	
+# Update placement preview with weapon data and position
+func update_placement_preview(weapon_data, grid_position, is_valid):
+	# Update size first
+	update_preview_size(weapon_data)
+	
+	# Then update position and visibility
+	update_preview_position(grid_position, is_valid)
+
+# Clear the placement preview
+func clear_placement_preview():
+	hide_preview()

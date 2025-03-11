@@ -1,120 +1,143 @@
-# weapon_types.gd
 extends Node
 
-# Weapon properties
-class WeaponData:
-	var id: String
-	var name: String
-	var description: String
-	var attack_range: int
-	var damage: int
-	var splash_radius: int
-	var cooldown: int
-	var cost: int
-	var size: Vector2  # Size in grid cells
-	var texture_path: String
-	
-	func _init(p_id, p_name, p_desc, p_range, p_damage, p_splash, p_cooldown, p_cost, p_size, p_texture):
-		id = p_id
-		name = p_name
-		description = p_desc
-		attack_range = p_range
-		damage = p_damage
-		splash_radius = p_splash
-		cooldown = p_cooldown
-		cost = p_cost
-		size = p_size
-		texture_path = p_texture
-
-# List of all available weapons
-var weapons = []
+# List of available weapons
+var available_weapons = []
 
 func _ready():
 	# Initialize weapon types
-	_initialize_weapons()
+	_initialize_weapon_types()
 
-func _initialize_weapons():
-	# Add all weapon types to the list
+# Initialize the available weapon types
+func _initialize_weapon_types():
+	# Add base structure
+	available_weapons.append({
+		"id": "food_base",
+		"name": "Food Fortress",
+		"description": "Your main base structure. Protect it at all costs!",
+		"type": "base",
+		"size": Vector2(3, 2),
+		"cost": 0,  # Bases are free to place
+		"attack_range": 0,  # Bases cannot attack
+		"damage": 0,
+		"splash_radius": 0,
+		"cooldown": 0
+	})
 	
-	# Ice Cream Catapult - Long range with medium damage
-	weapons.append(WeaponData.new(
-		"ice_cream_catapult",
-		"Ice Cream Catapult",
-		"Launches ice cream scoops at long range. Slow but powerful!",
-		8,  # Range (in cells)
-		3,  # Damage
-		1,  # Splash radius (in cells)
-		2,  # Cooldown (in turns)
-		3,  # Cost (in resource points)
-		Vector2(2, 2),  # Size (2x2 cells)
-		"res://assets/weapons/ice_cream_catapult.png"  # Texture path (will need to be created)
-	))
+	# Add offensive weapons
+	available_weapons.append({
+		"id": "ice_cream_catapult",
+		"name": "Ice Cream Catapult",
+		"description": "Launches ice cream projectiles at medium range",
+		"type": "offensive",
+		"size": Vector2(2, 2),
+		"cost": 5,
+		"attack_range": 8,
+		"damage": 4,
+		"splash_radius": 1,
+		"cooldown": 1
+	})
 	
-	# Cream Puff Cannon - Medium range with splash damage
-	weapons.append(WeaponData.new(
-		"cream_puff_cannon",
-		"Cream Puff Cannon",
-		"Fires cream puffs at medium range with moderate splash damage.",
-		5,  # Range
-		2,  # Damage
-		2,  # Splash radius
-		1,  # Cooldown
-		2,  # Cost
-		Vector2(2, 1),  # Size (2x1 cells)
-		"res://assets/weapons/cream_puff_cannon.png"
-	))
+	available_weapons.append({
+		"id": "bread_cannon",
+		"name": "Bread Cannon",
+		"description": "Fires stale baguettes at long range",
+		"type": "offensive",
+		"size": Vector2(3, 1),
+		"cost": 7,
+		"attack_range": 12,
+		"damage": 5,
+		"splash_radius": 0,
+		"cooldown": 2
+	})
 	
-	# Pie Flinger - Short range but rapid fire
-	weapons.append(WeaponData.new(
-		"pie_flinger",
-		"Pie Flinger",
-		"Throws pies at short range. Fast reload and cheap!",
-		3,  # Range
-		1,  # Damage
-		1,  # Splash radius
-		0,  # No cooldown
-		1,  # Cost
-		Vector2(1, 1),  # Size (1x1 cells)
-		"res://assets/weapons/pie_flinger.png"
-	))
+	available_weapons.append({
+		"id": "sauce_sprayer",
+		"name": "Sauce Sprayer",
+		"description": "Short-range condiment assault weapon",
+		"type": "offensive",
+		"size": Vector2(1, 2),
+		"cost": 3,
+		"attack_range": 5,
+		"damage": 3,
+		"splash_radius": 2,
+		"cooldown": 1
+	})
 	
-	# Cake Bomb - Medium range with large splash damage
-	weapons.append(WeaponData.new(
-		"cake_bomb",
-		"Cake Bomb",
-		"Explosive cake with massive splash damage but limited range.",
-		4,  # Range
-		2,  # Damage
-		3,  # Splash radius
-		2,  # Cooldown
-		3,  # Cost
-		Vector2(1, 1),  # Size (1x1 cells)
-		"res://assets/weapons/cake_bomb.png"
-	))
+	# Add defensive structures
+	available_weapons.append({
+		"id": "jello_shield",
+		"name": "Jello Shield",
+		"description": "Absorbs incoming attacks",
+		"type": "defensive",
+		"size": Vector2(2, 1),
+		"cost": 4,
+		"attack_range": 0,
+		"damage": 0,
+		"splash_radius": 0,
+		"cooldown": 0
+	})
 	
-	# Milkshake Mortar - Maximum range
-	weapons.append(WeaponData.new(
-		"milkshake_mortar",
-		"Milkshake Mortar",
-		"Lobs milkshakes in an arc for maximum range but less accuracy.",
-		10,  # Range
-		2,  # Damage
-		2,  # Splash radius
-		1,  # Cooldown
-		4,  # Cost
-		Vector2(2, 2),  # Size (2x2 cells)
-		"res://assets/weapons/milkshake_mortar.png"
-	))
+	# Add resource production
+	available_weapons.append({
+		"id": "donut_factory",
+		"name": "Donut Factory",
+		"description": "Generates resources each turn",
+		"type": "production",
+		"size": Vector2(2, 2),
+		"cost": 8,
+		"attack_range": 0,
+		"damage": 0,
+		"splash_radius": 0,
+		"cooldown": 0
+	})
 	
-	print("Weapon types initialized: ", weapons.size())
+	print("Weapon types initialized with ", available_weapons.size(), " types")
 
-# Get weapon data by ID
-func get_weapon_by_id(id: String) -> WeaponData:
-	for weapon in weapons:
+# Get a list of all weapon types
+func get_all_weapons():
+	return available_weapons
+
+# Get a specific weapon by ID
+func get_weapon_by_id(id):
+	for weapon in available_weapons:
 		if weapon.id == id:
 			return weapon
 	return null
 
-# Get all weapon data
-func get_all_weapons() -> Array:
-	return weapons
+# Get the base weapon type
+func get_base_weapon():
+	for weapon in available_weapons:
+		if "type" in weapon and weapon.type == "base":
+			return weapon
+	return null
+
+# Get offensive weapons only
+func get_offensive_weapons():
+	var offensive = []
+	for weapon in available_weapons:
+		if "type" in weapon and weapon.type == "offensive":
+			offensive.append(weapon)
+	return offensive
+
+# Get defensive weapons only
+func get_defensive_weapons():
+	var defensive = []
+	for weapon in available_weapons:
+		if "type" in weapon and weapon.type == "defensive":
+			defensive.append(weapon)
+	return defensive
+
+# Get production structures only
+func get_production_structures():
+	var production = []
+	for weapon in available_weapons:
+		if "type" in weapon and weapon.type == "production":
+			production.append(weapon)
+	return production
+
+# Get weapon type as string
+func get_type(weapon_id):
+	var weapon = get_weapon_by_id(weapon_id)
+	if weapon and "type" in weapon:
+		return weapon.type
+	return ""

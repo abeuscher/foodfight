@@ -2,6 +2,7 @@ extends Node
 
 signal attack_executed(attacking_weapon, target_position, damage)
 signal attack_completed()
+signal points_awarded(player_id, points)
 
 # References to game components
 var game_board
@@ -14,6 +15,10 @@ var visual_manager
 
 # Initialization flag
 var is_initialized = false
+
+# Attack settings
+var attack_delay = 0.8  # Seconds between attacks
+var points_per_damage = 10  # Points awarded per damage point
 
 func initialize(p_game_board, p_weapon_types):
 	print("Initializing AttackState...")
@@ -60,7 +65,7 @@ func execute_queued_attacks(queued_attacks):
 	for attack in queued_attacks:
 		_execute_single_attack(attack)
 		# Add delay between attacks for visualization
-		await get_tree().create_timer(1.0).timeout
+		await get_tree().create_timer(attack_delay).timeout
 	
 	# Signal that all attacks are completed
 	print("All attacks executed, attack phase completed")
@@ -90,13 +95,29 @@ func _execute_single_attack(attack):
 	# Get targets at the attack location
 	var targets_at_cell = _get_targets_at_position(enemy_player_id, target_position)
 	
+	# Visualize the attack
+	if visual_manager:
+		visual_manager.create_attack_animation(weapon.position, target_position, base_damage)
+	else:
+		# Fallback to basic visualization if visual_manager isn't available
+		game_board.visualize_attack(weapon.position, target_position, base_damage)
+	
+	# Track total damage for scoring
+	var total_damage = 0
+	
 	# Apply damage to primary targets
 	for target in targets_at_cell:
-		apply_damage(target, base_damage)
+		var damage_dealt = apply_damage(target, base_damage)
+		total_damage += damage_dealt
 	
 	# Apply splash damage if any
 	if splash_radius > 0 and targets_at_cell.size() > 0:
-		_apply_splash_damage(enemy_player_id, target_position, targets_at_cell, base_damage, splash_radius)
+		var splash_damage = _apply_splash_damage(enemy_player_id, target_position, targets_at_cell, base_damage, splash_radius)
+		total_damage += splash_damage
+	
+	# Award points based on damage dealt
+	if total_damage > 0:
+		award_points(player_id, total_damage)
 	
 	# Emit signal for visualization
 	emit_signal("attack_executed", weapon, target_position, base_damage)
@@ -113,6 +134,8 @@ func _get_targets_at_position(player_id, position):
 
 # Apply splash damage to surrounding targets
 func _apply_splash_damage(player_id, center_position, already_hit_targets, base_damage, splash_radius):
+	var total_splash_damage = 0
+	
 	for potential_target in weapon_manager.get_player_weapons(player_id):
 		# Skip already damaged targets
 		if potential_target in already_hit_targets:
@@ -122,22 +145,46 @@ func _apply_splash_damage(player_id, center_position, already_hit_targets, base_
 		if distance <= splash_radius:
 			# Calculate splash damage (reduced by distance)
 			var splash_damage = base_damage / (splash_radius + 1) * (splash_radius - distance + 1)
-			apply_damage(potential_target, splash_damage)
+			var damage_dealt = apply_damage(potential_target, splash_damage)
+			total_splash_damage += damage_dealt
+	
+	return total_splash_damage
 
 # Apply damage to a target
 func apply_damage(target, damage):
 	if !is_initialized:
-		return
+		return 0
+	
+	# Store original health for damage calculation
+	var original_health = target.health
 	
 	# Reduce target health
 	target.health -= damage
-	print("Target hit for ", damage, " damage. Health remaining: ", target.health)
+	
+	# Calculate actual damage dealt (avoid negative health)
+	var actual_damage = original_health - max(0, target.health)
+	
+	print("Target hit for ", actual_damage, " damage. Health remaining: ", target.health)
+	
+	# Update visual representation of health
+	if visual_manager:
+		visual_manager.show_weapon_damage(target, actual_damage)
 	
 	# Check if target is destroyed
 	if target.health <= 0:
 		print("Target destroyed!")
 		weapon_manager.remove_weapon_from_board(target)
-		
+	
+	return actual_damage
+
+# Award points to a player based on damage dealt
+func award_points(player_id, damage):
+	var points = int(damage * points_per_damage)
+	print("Player ", player_id + 1, " awarded ", points, " points for dealing ", damage, " damage")
+	
+	# Emit signal for score tracking
+	emit_signal("points_awarded", player_id, points)
+
 # Attack queuing
 var queued_attacks = []
 
@@ -158,3 +205,46 @@ func execute_attacks():
 	execute_queued_attacks(queued_attacks)
 	# Clear the queue after execution
 	queued_attacks = []
+
+# Check for game over condition
+func check_game_over():
+	if !is_initialized or !weapon_manager:
+		return -1
+	
+	# Check if all bases of player 0 are destroyed
+	var player0_has_bases = false
+	for weapon in weapon_manager.get_player_weapons(0):
+		# Check if the data has a type property
+		if "data" in weapon and weapon.data is Object and weapon.data.has_method("get_type"):
+			if weapon.data.get_type() == "base":
+				player0_has_bases = true
+				break
+		# Or try to check the "id" property as a fallback to identify bases
+		elif "data" in weapon and "id" in weapon.data:
+			var id = str(weapon.data.id).to_lower()
+			if id.contains("base"):
+				player0_has_bases = true
+				break
+	
+	# Check if all bases of player 1 are destroyed
+	var player1_has_bases = false
+	for weapon in weapon_manager.get_player_weapons(1):
+		# Check if the data has a type property
+		if "data" in weapon and weapon.data is Object and weapon.data.has_method("get_type"):
+			if weapon.data.get_type() == "base":
+				player1_has_bases = true
+				break
+		# Or try to check the "id" property as a fallback to identify bases
+		elif "data" in weapon and "id" in weapon.data:
+			var id = str(weapon.data.id).to_lower()
+			if id.contains("base"):
+				player1_has_bases = true
+				break
+	
+	# Return winning player ID or -1 if no winner yet
+	if !player0_has_bases:
+		return 1  # Player 2 wins
+	elif !player1_has_bases:
+		return 0  # Player 1 wins
+	else:
+		return -1  # No winner yet
