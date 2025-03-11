@@ -1,0 +1,59 @@
+[gd_scene load_steps=2 format=3 uid="uid://bxxxxxxxxxx"]
+
+[ext_resource type="Script" path="res://tests/test_result_viewer.gd" id="1_viewer"]
+
+[node name="TestResultViewer" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_viewer")
+
+[node name="Panel" type="Panel" type="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" type="MarginContainer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" type="VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" type="Label"]
+layout_mode = 2
+text = "Test Results"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" type="HSeparator"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" type="ScrollContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LogContent" type="RichTextLabel" type="RichTextLabel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+focus_mode = 2
+bbcode_enabled = true
+selection_enabled = true
+
+[node name="RunAgainButton" type="Button" type="Button"]
+layout_mode = 2
+text = "Run Tests Again"

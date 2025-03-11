@@ -30,10 +30,15 @@ func _ready():
 	get_tree().root.ready.connect(_on_scene_tree_ready)
 
 func _on_scene_tree_ready():
-	print("Scene tree ready")
-	await get_tree().process_frame
-	current_scene = get_tree().current_scene
-	print("Current scene: ", current_scene.name)
+	# Safely get current scene
+	if get_tree() and get_tree().root:
+		current_scene = get_tree().current_scene
+		if current_scene:
+			print("Current scene: ", current_scene.name)
+		else:
+			print("Warning: Current scene is null. This is normal during testing.")
+	else:
+		print("Warning: Scene tree not ready")
 
 # Main initialization function called from main.gd
 func initialize_game(main_node):

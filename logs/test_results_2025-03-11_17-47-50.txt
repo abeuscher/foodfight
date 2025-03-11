@@ -1,0 +1,46 @@
+Godot Engine v4.4.stable.official.4c311cbee - https://godotengine.org
+
+Starting test runner...
+Test suite loaded successfully
+Starting test suite...
+
+===== RUNNING TESTS =====
+Starting test runner...
+Test suite loaded successfully
+Warning: run_tests lacks run_tests() method
+
+----- Running test_game_state_machine -----
+Setting up test environment...
+Initializing GameStateMachine...
+GameStateMachine initialized successfully
+Game state changed to: WEAPON_PLACEMENT
+Starting weapon placement phase for Player 1
+SCRIPT ERROR: Invalid call. Nonexistent function '_create_weapon_buttons' in base 'Nil'.
+   at: _apply_state_change (res://scripts/states/game_state_machine.gd:127)
+✅ test_resolution_to_weapon_placement: State should transition to WEAPON_PLACEMENT - PASS
+Tearing down test environment...
+Warning: test_result_viewer lacks run_tests() method
+
+===== TEST RESULTS =====
+Tests passed: 1
+Tests failed: 0
+Total tests: 1
+
+✅ ALL TESTS PASSED
+Test results saved to: user://logs/test_results_2025-03-11_17-47-51.log
+GameManager singleton initialized
+Scene tree ready
+SCRIPT ERROR: Invalid access to property or key 'name' on a base object of type 'null instance'.
+   at: _on_scene_tree_ready (res://scripts/states/game_manager.gd:36)
+WARNING: 1 RID of type "Canvas" was leaked.
+   at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2677)
+WARNING: 1 RID of type "CanvasItem" was leaked.
+   at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2677)
+ERROR: 1 RID allocations of type 'N16RendererViewport8ViewportE' were leaked at exit.
+ERROR: 4 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 1 RID allocations of type 'N17RendererSceneCull8ScenarioE' were leaked at exit.
+ERROR: 1 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2378)
+ERROR: 4 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:614)

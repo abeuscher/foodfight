@@ -1,0 +1,34 @@
+Godot Engine v4.4.stable.official.4c311cbee - https://godotengine.org
+
+Starting test runner...
+Test suite loaded successfully
+Starting test suite...
+Found test files: ["test_game_state_machine"]
+
+===== RUNNING TESTS =====
+Loading test script: res://tests/test_game_state_machine.gd
+
+----- Running test_game_state_machine -----
+Setting up test environment...
+GameStateMachine ready - waiting for initialization
+Initializing GameStateMachine...
+GameStateMachine initialized successfully
+Game state changed to: WEAPON_PLACEMENT
+Starting weapon placement phase for Player 1
+Mock: Creating weapon buttons
+✅ test_resolution_to_weapon_placement: State should transition to WEAPON_PLACEMENT - PASS
+Tearing down test environment...
+
+===== TEST RESULTS =====
+Tests passed: 1
+Tests failed: 0
+Total tests: 1
+
+✅ ALL TESTS PASSED
+Test results saved to: user://logs/test_results_2025-03-11_18-04-25.log
+GameManager singleton initialized
+Warning: Current scene is null. This is normal during testing.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2378)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:614)
