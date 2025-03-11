@@ -13,9 +13,6 @@ var visual_manager
 @onready var weapon_manager = $WeaponManager
 @onready var targeting_manager = $TargetingManager
 
-# Initialization flag
-var is_initialized = false
-
 # Attack settings
 var attack_delay = 0.8  # Seconds between attacks
 var points_per_damage = 10  # Points awarded per damage point
@@ -25,34 +22,18 @@ func initialize(p_game_board, p_weapon_types):
 	game_board = p_game_board
 	weapon_types = p_weapon_types
 	
-	# Check for required components
-	if !game_board or !weapon_types:
-		push_error("AttackState: Missing required components")
-		return false
-	
 	if game_board.has_node("VisualManager"):
 		visual_manager = game_board.get_node("VisualManager")
-	
-	# Validate child components
-	if !weapon_manager or !targeting_manager:
-		push_error("AttackState: Missing required child components")
-		return false
 	
 	# Initialize child components
 	weapon_manager.initialize(game_board)
 	targeting_manager.initialize(game_board)
 	
-	is_initialized = true
 	print("Attack state initialized")
 	return true
 
 # Execute all queued attacks from the targeting phase
 func execute_queued_attacks(queued_attacks):
-	if !is_initialized:
-		push_error("AttackState: Cannot execute attacks - not initialized")
-		emit_signal("attack_completed")
-		return
-	
 	print("Executing queued attacks: ", queued_attacks.size(), " attacks")
 	
 	# No attacks to execute
@@ -79,10 +60,7 @@ func _execute_single_attack(attack):
 	
 	# Get the cell at target position
 	var target_cell = game_board.get_cell_at_position(game_board.grid_to_world(target_position))
-	if !target_cell:
-		print("Error: No cell found at target position ", target_position)
-		return
-		
+	
 	print("Player ", player_id + 1, " attacking with ", weapon.data.name, " at position ", target_position)
 	
 	# Calculate damage based on weapon specs
@@ -152,9 +130,6 @@ func _apply_splash_damage(player_id, center_position, already_hit_targets, base_
 
 # Apply damage to a target
 func apply_damage(target, damage):
-	if !is_initialized:
-		return 0
-	
 	# Store original health for damage calculation
 	var original_health = target.health
 	
@@ -208,9 +183,6 @@ func execute_attacks():
 
 # Check for game over condition
 func check_game_over():
-	if !is_initialized or !weapon_manager:
-		return -1
-	
 	# Check if all bases of player 0 are destroyed
 	var player0_has_bases = false
 	for weapon in weapon_manager.get_player_weapons(0):

@@ -12,6 +12,7 @@ var weapon_buttons_container
 var targeting_buttons_container
 var end_placement_button
 var end_targeting_button
+var title_screen
 
 # Reference to components
 var weapon_placement
@@ -24,6 +25,9 @@ var main_scene
 
 # Initialization flag
 var is_initialized = false
+
+# Signal for title screen animation completion
+signal title_screen_completed
 
 func _ready():
 	# Wait a frame to ensure all nodes are ready
@@ -66,6 +70,10 @@ func _ready():
 	if main_scene.has_node("UI/BottomBar/EndTargetingButton"):
 		end_targeting_button = main_scene.get_node("UI/BottomBar/EndTargetingButton")
 	
+	if main_scene.has_node("UI/TitleScreen"):
+		title_screen = main_scene.get_node("UI/TitleScreen")
+		title_screen.animation_completed.connect(_on_title_screen_animation_completed)
+	
 	# Get references to other nodes
 	if main_scene.has_node("WeaponPlacement"):
 		weapon_placement = main_scene.get_node("WeaponPlacement")
@@ -78,6 +86,20 @@ func _ready():
 	
 	is_initialized = true
 	print("UI Manager initialized")
+
+# Handle title screen animation completed
+func _on_title_screen_animation_completed():
+	emit_signal("title_screen_completed")
+
+# Show title screen for upcoming phase
+func show_phase_title(phase_name):
+	if !is_initialized or !title_screen:
+		print("GameUIManager: Title screen not available")
+		emit_signal("title_screen_completed")
+		return
+	
+	print("GameUIManager: Showing title for phase: " + phase_name)
+	title_screen.show_title(phase_name)
 
 # Ensure we have all needed GameManager components
 func _ensure_game_components():

@@ -13,40 +13,25 @@ var target_position = null
 var valid_targets = []
 var hover_cell = null
 
-# Initialization flag
-var is_initialized = false
-
 func _ready():
 	print("TargetingManager: Ready")
 	
 	# Get weapon manager reference
-	if get_parent() and get_parent().has_node("WeaponManager"):
-		weapon_manager = get_parent().get_node("WeaponManager")
-		print("TargetingManager: Found WeaponManager reference")
-	else:
-		print("Error: WeaponManager not found")
+	weapon_manager = get_parent().get_node("WeaponManager")
+	print("TargetingManager: Found WeaponManager reference")
 
 func initialize(p_game_board):
 	print("Initializing TargetingManager...")
 	
-	if !p_game_board:
-		push_error("TargetingManager: No game board provided")
-		return false
-	
 	game_board = p_game_board
 	print("TargetingManager: Game board set")
 	
-	if !weapon_manager:
-		push_error("TargetingManager: WeaponManager not available")
-		return false
-	
-	is_initialized = true
 	print("Targeting manager initialized")
 	return true
 
 # Handle input for targeting
 func handle_input(event):
-	if !is_initialized or !targeting_active or !selected_weapon:
+	if !targeting_active or !selected_weapon:
 		return
 	
 	# Handle mouse movement for hover effect
@@ -72,7 +57,7 @@ func handle_input(event):
 
 # Update hover effect based on mouse position
 func update_hover_position(global_pos):
-	if !game_board or !targeting_active:
+	if !targeting_active:
 		return
 		
 	var cell = game_board.get_cell_at_position(global_pos)
@@ -97,23 +82,18 @@ func update_hover_position(global_pos):
 
 # Activate targeting mode
 func activate_targeting():
-	if is_initialized:
-		targeting_active = true
-		hover_cell = null
-		print("TargetingManager: Targeting mode activated")
+	targeting_active = true
+	hover_cell = null
+	print("TargetingManager: Targeting mode activated")
 
 # Deactivate targeting mode
 func deactivate_targeting():
-	if is_initialized:
-		targeting_active = false
-		clear_targeting_visuals()
-		print("TargetingManager: Targeting mode deactivated")
+	targeting_active = false
+	clear_targeting_visuals()
+	print("TargetingManager: Targeting mode deactivated")
 
 # Select a weapon to attack with
 func select_weapon(weapon, player_id):
-	if !is_initialized:
-		return
-	
 	print("TargetingManager: Weapon selected: ", weapon.data.name, " for Player ", player_id + 1)
 	selected_weapon = weapon
 	
@@ -129,9 +109,6 @@ func select_weapon(weapon, player_id):
 
 # Get target for weapon (for automated attacks)
 func get_target_for_weapon(weapon, player_id):
-	if !is_initialized or !weapon_manager:
-		return null
-	
 	var enemy_player_id = 1 - player_id
 	var potential_targets = []
 	
@@ -149,9 +126,6 @@ func calculate_distance(pos1, pos2):
 
 # Get all valid targets for a weapon
 func get_valid_targets(weapon, player_id):
-	if !is_initialized:
-		return []
-	
 	var targets = []
 	var enemy_player_id = 1 - player_id
 	print("TargetingManager: Calculating valid targets for Player ", player_id + 1, " against Player ", enemy_player_id + 1)
@@ -205,7 +179,7 @@ func get_valid_targets(weapon, player_id):
 
 # Check if a cell is a valid target
 func is_valid_target(cell):
-	if !is_initialized or !cell:
+	if !cell:
 		return false
 	
 	for valid_pos in valid_targets:
@@ -218,8 +192,7 @@ func clear_targeting_visuals():
 	hover_cell = null
 	
 	# Reset visual states on the game board
-	if game_board:
-		game_board.reset_all_visual_states()
+	game_board.reset_all_visual_states()
 
 # Confirm the selected target
 func confirm_target():

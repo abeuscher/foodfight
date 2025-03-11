@@ -16,9 +16,6 @@ var selected_weapons = []
 var targets = []
 var max_targets = 3
 
-# Initialization flag
-var is_initialized = false
-
 func _ready():
 	print("TargetingState ready")
 
@@ -26,23 +23,15 @@ func _ready():
 func initialize(p_game_board, p_weapon_manager, p_targeting_manager):
 	print("Initializing TargetingState...")
 	
-	if !p_game_board or !p_weapon_manager or !p_targeting_manager:
-		push_error("TargetingState: Missing required dependencies")
-		return false
-	
 	game_board = p_game_board
 	weapon_manager = p_weapon_manager
 	targeting_manager = p_targeting_manager
 	
-	is_initialized = true
 	print("TargetingState initialized")
 	return true
 
 # Start targeting for a player
 func start_targeting_phase(player_id):
-	if !is_initialized:
-		return false
-	
 	print("TargetingState: Starting targeting for Player ", player_id + 1)
 	current_player_id = player_id
 	is_targeting_active = true
@@ -58,7 +47,7 @@ func start_targeting_phase(player_id):
 
 # Handle input during targeting
 func handle_input(event):
-	if !is_initialized or !is_targeting_active or !selected_weapon:
+	if !is_targeting_active or !selected_weapon:
 		return
 	
 	# Pass input to targeting manager
@@ -66,7 +55,7 @@ func handle_input(event):
 
 # Select a weapon to target with
 func select_weapon_for_targeting(weapon, player_id):
-	if !is_initialized or !is_targeting_active:
+	if !is_targeting_active:
 		return
 	
 	print("TargetingState: Weapon selected for targeting: ", weapon.data.name)
@@ -78,7 +67,7 @@ func select_weapon_for_targeting(weapon, player_id):
 
 # Handle target selection from targeting manager
 func _on_target_selected(weapon, target_position):
-	if !is_initialized or !is_targeting_active:
+	if !is_targeting_active:
 		return
 	
 	print("TargetingState: Target selected at ", target_position)
@@ -96,7 +85,7 @@ func _on_target_selected(weapon, target_position):
 
 # End targeting button handler
 func on_end_targeting_button_pressed():
-	if !is_initialized or !is_targeting_active:
+	if !is_targeting_active:
 		return
 	
 	print("TargetingState: Ending targeting")

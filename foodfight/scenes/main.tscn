@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://pdr201r5pdmg"]
+[gd_scene load_steps=17 format=3 uid="uid://pdr201r5pdmg"]
 
 [ext_resource type="Script" uid="uid://xbsa68mc8mvt" path="res://scripts/main.gd" id="1_0aq6d"]
 [ext_resource type="PackedScene" uid="uid://c888idx4rii4b" path="res://scenes/game_board.tscn" id="2_irwmq"]
@@ -12,8 +12,9 @@
 [ext_resource type="Script" uid="uid://bfcvk50ght2rn" path="res://scripts/states/attack_state.gd" id="10_wmjgs"]
 [ext_resource type="Script" uid="uid://duftxnb3se67y" path="res://scripts/states/weapon_manager.gd" id="11_hxprs"]
 [ext_resource type="Script" uid="uid://icjym3lg1p1r" path="res://scripts/states/targeting_manager.gd" id="12_rkbwm"]
-[ext_resource type="Script" uid="uid://y054nay23flq" path="res://scripts/weapons/weapon_visualization.gd" id="14_lcdmi"]
 [ext_resource type="Script" path="res://scripts/states/targeting_state.gd" id="15_targst"]
+[ext_resource type="Script" uid="uid://y054nay23flq" path="res://scripts/weapons/weapon_visualization.gd" id="14_lcdmi"]
+[ext_resource type="PackedScene" path="res://scenes/title_screen.tscn" id="16_title"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_0aq6d")
@@ -123,6 +124,10 @@ alignment = 1
 layout_mode = 2
 text = "Resources: 10"
 horizontal_alignment = 1
+
+[node name="TitleScreen" parent="UI" instance=ExtResource("16_title")]
+z_index = 10
+visible = false
 
 [node name="BottomBar" type="Panel" parent="UI"]
 anchors_preset = 12

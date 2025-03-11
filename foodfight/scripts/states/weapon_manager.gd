@@ -8,28 +8,16 @@ var visual_manager
 var player_weapons = [[], []]  # Stores active weapons for each player
 var default_health = 10  # Default health for weapons
 
-# Initialization flag
-var is_initialized = false
-
 func initialize(p_game_board):
-	if !p_game_board:
-		print("Error: No game board provided to WeaponManager")
-		return
-		
 	game_board = p_game_board
 	
 	if game_board.has_node("VisualManager"):
 		visual_manager = game_board.get_node("VisualManager")
 	
-	is_initialized = true
 	print("Weapon manager initialized")
 
 # Collect all weapons placed on the board
 func collect_weapons():
-	if !is_initialized:
-		print("Error: Cannot collect weapons - not initialized")
-		return []
-		
 	player_weapons = [[], []]
 	
 	# Scan the grid to find all placed weapons
@@ -78,30 +66,20 @@ func collect_weapons():
 
 # Reset all weapon cooldowns to 0
 func reset_weapon_cooldowns():
-	if !is_initialized:
-		return
-		
 	for player_idx in range(2):
 		for weapon in player_weapons[player_idx]:
 			weapon.current_cooldown = 0
 
 # Get weapons for a specific player
 func get_player_weapons(player_id):
-	if !is_initialized or player_id < 0 or player_id >= player_weapons.size():
-		return []
 	return player_weapons[player_id]
 
 # Get all weapons
 func get_all_weapons():
-	if !is_initialized:
-		return []
 	return player_weapons[0] + player_weapons[1]
 
 # Get weapon at specific position
 func get_weapon_at_position(position, player_id = -1):
-	if !is_initialized:
-		return null
-		
 	if player_id >= 0:
 		# Look only in specific player's weapons
 		for weapon in player_weapons[player_id]:
@@ -117,9 +95,6 @@ func get_weapon_at_position(position, player_id = -1):
 
 # Remove a weapon from the board
 func remove_weapon_from_board(weapon):
-	if !is_initialized or !weapon:
-		return
-	
 	print("Removing weapon from board: ", weapon.data.name, " at position ", weapon.position)
 	
 	# Find the weapon in the grid and remove it
@@ -164,7 +139,7 @@ func remove_weapon_from_board(weapon):
 
 # Update health display for a weapon
 func update_weapon_health_display(weapon):
-	if !is_initialized or !visual_manager or !weapon:
+	if !visual_manager:
 		return
 	
 	# Create instance ID to find the health bar
