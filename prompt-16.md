@@ -1,6 +1,15 @@
 # Session Prompt: Implementing Damage System for FoodFight Game
 
-## Summary of Progress
+## Current Session Progress
+In our current session, we've made UI improvements to enhance the game's visual presentation:
+1. Refined the theme file with reduced border widths (from 3-4px to 2px)
+2. Standardized font sizes to 14px across UI components
+3. Adjusted corner radii for a more polished appearance
+4. Improved content margins for better text alignment
+5. Reduced shadow effects for a cleaner interface
+6. These changes make the UI more compact and ensure better text fit within containers
+
+## Summary of Previous Progress
 We've successfully built the core game architecture with:
 1. A robust game state machine with distinct phases from setup to resolution
 2. Weapon placement and targeting mechanics
