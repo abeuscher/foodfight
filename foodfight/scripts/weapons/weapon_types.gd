@@ -20,7 +20,8 @@ func _initialize_weapon_types():
 		"attack_range": 0,  # Bases cannot attack
 		"damage": 0,
 		"splash_radius": 0,
-		"cooldown": 0
+		"cooldown": 0,
+		"health": 100  # Base has high health
 	})
 	
 	# Add offensive weapons
@@ -34,7 +35,8 @@ func _initialize_weapon_types():
 		"attack_range": 8,
 		"damage": 4,
 		"splash_radius": 1,
-		"cooldown": 1
+		"cooldown": 1,
+		"health": 20  # Offensive weapons have medium health
 	})
 	
 	available_weapons.append({
@@ -47,7 +49,8 @@ func _initialize_weapon_types():
 		"attack_range": 12,
 		"damage": 5,
 		"splash_radius": 0,
-		"cooldown": 2
+		"cooldown": 2,
+		"health": 25  # Higher-tier weapon has more health
 	})
 	
 	available_weapons.append({
@@ -60,7 +63,8 @@ func _initialize_weapon_types():
 		"attack_range": 5,
 		"damage": 3,
 		"splash_radius": 2,
-		"cooldown": 1
+		"cooldown": 1,
+		"health": 15  # Lower-tier weapon has less health
 	})
 	
 	# Add defensive structures
@@ -74,7 +78,9 @@ func _initialize_weapon_types():
 		"attack_range": 0,
 		"damage": 0,
 		"splash_radius": 0,
-		"cooldown": 0
+		"cooldown": 0,
+		"health": 30,  # Defensive structures have high health
+		"defense_bonus": 2  # Defensive structures reduce damage to nearby structures
 	})
 	
 	# Add resource production
@@ -88,7 +94,8 @@ func _initialize_weapon_types():
 		"attack_range": 0,
 		"damage": 0,
 		"splash_radius": 0,
-		"cooldown": 0
+		"cooldown": 0,
+		"health": 35  # Production structures have good health
 	})
 	
 	print("Weapon types initialized with ", available_weapons.size(), " types")

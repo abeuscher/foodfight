@@ -29,28 +29,31 @@ func collect_weapons():
 				# Only add the root cell of a weapon (to avoid duplicates)
 				if weapon_entry.root_position == cell.position:
 					if "player_id" in weapon_entry:
-						# Set health based on weapon type
+							# Get weapon health from weapon data if available
 						var health = default_health
 						
-						# Check if the weapon is a base by examining the id
-						var is_base = false
-						if weapon_entry.weapon_data is Object:
-							# Try to check for a type property or method
-							if weapon_entry.weapon_data.has_method("get_type"):
-								is_base = weapon_entry.weapon_data.get_type() == "base"
-							elif weapon_entry.weapon_data.has_method("get_id"):
-								var id = str(weapon_entry.weapon_data.get_id()).to_lower()
-								is_base = id.contains("base")
-							# Fall back to checking the id property
-							elif "id" in weapon_entry.weapon_data:
-								var id = str(weapon_entry.weapon_data.id).to_lower()
-								is_base = id.contains("base")
-						elif "type" in weapon_entry.weapon_data:
-							is_base = weapon_entry.weapon_data.type == "base"
-						
-						# Bases have much higher health
-						if is_base:
-							health = default_health * 10  # Increased from 2x to 10x
+						if "health" in weapon_entry.weapon_data:
+							health = weapon_entry.weapon_data.health
+						else:
+							# Check if the weapon is a base
+							var is_base = false
+							if weapon_entry.weapon_data is Object:
+								# Try to check for a type property or method
+								if weapon_entry.weapon_data.has_method("get_type"):
+									is_base = weapon_entry.weapon_data.get_type() == "base"
+								elif weapon_entry.weapon_data.has_method("get_id"):
+									var id = str(weapon_entry.weapon_data.get_id()).to_lower()
+									is_base = id.contains("base")
+								# Fall back to checking the id property
+								elif "id" in weapon_entry.weapon_data:
+									var id = str(weapon_entry.weapon_data.id).to_lower()
+									is_base = id.contains("base")
+							elif "type" in weapon_entry.weapon_data:
+								is_base = weapon_entry.weapon_data.type == "base"
+							
+							# Bases have much higher health if not defined
+							if is_base:
+								health = 100
 						
 						player_weapons[weapon_entry.player_id].append({
 							"data": weapon_entry.weapon_data,
@@ -180,10 +183,11 @@ func remove_weapon_from_board(weapon):
 # Update health display for a weapon
 func update_weapon_health_display(weapon):
 	if !visual_manager:
+		print("Warning: No visual manager available to update health display")
 		return
 	
 	# Create instance ID to find the health bar
-	var weapon_id
+	var weapon_id = "unknown"
 	
 	# Handle different ways to get the weapon ID
 	if weapon.data is Object:
@@ -191,11 +195,37 @@ func update_weapon_health_display(weapon):
 			weapon_id = weapon.data.get_id()
 		elif "id" in weapon.data:
 			weapon_id = weapon.data.id
-	else:
-		# Fallback
-		weapon_id = "unknown"
+	elif weapon.data is Dictionary and "id" in weapon.data:
+		weapon_id = weapon.data.id
 		
 	var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
 	
+	print("WeaponManager: Updating health bar for " + instance_id + " health=" + str(weapon.health))
+	
 	# Update health bar
 	visual_manager.update_health_bar(instance_id, weapon.health)
+
+# Get defensive bonus for a position
+func get_defensive_bonus(position, player_id):
+	var bonus = 0
+	var defense_radius = 2  # How far defensive structures protect
+	
+	for weapon in get_player_weapons(player_id):
+		# Skip weapons that aren't defensive
+		var is_defensive = false
+		if "type" in weapon.data and weapon.data.type == "defensive":
+			is_defensive = true
+		
+		if is_defensive:
+			# Calculate distance to the defensive structure
+			var distance = abs(weapon.position.x - position.x) + abs(weapon.position.y - position.y)
+			if distance <= defense_radius:
+				# Get defense bonus from the defensive structure
+				var defense_value = 1  # Default defense value
+				if "defense_bonus" in weapon.data:
+					defense_value = weapon.data.defense_bonus
+				
+				# More bonus for closer structures
+				bonus += defense_value * (defense_radius - distance + 1) / defense_radius
+	
+	return bonus

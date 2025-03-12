@@ -17,6 +17,9 @@ var visual_manager
 var attack_delay = 0.8  # Seconds between attacks
 var points_per_damage = 10  # Points awarded per damage point
 
+# Damage system constants
+var min_damage_percent = 0.25  # Minimum damage after defense (25%)
+
 func initialize(p_game_board, p_weapon_types):
 	print("Initializing AttackState...")
 	game_board = p_game_board
@@ -133,17 +136,33 @@ func apply_damage(target, damage):
 	# Store original health for damage calculation
 	var original_health = target.health
 	
+	# Get defensive bonus for the target position
+	var defense_bonus = weapon_manager.get_defensive_bonus(target.position, target.player_id)
+	
+	# Calculate final damage after defense
+	var modified_damage = damage
+	if defense_bonus > 0:
+		# Reduce damage based on defense bonus, but ensure at least min_damage_percent
+		var damage_reduction = clamp(defense_bonus * 0.25, 0, 0.75)  # Cap reduction at 75%
+		modified_damage = damage * (1.0 - damage_reduction)
+		modified_damage = max(modified_damage, damage * min_damage_percent)
+		print("Damage reduced from ", damage, " to ", modified_damage, " due to defensive bonus of ", defense_bonus)
+	
 	# Reduce target health
-	target.health -= damage
+	target.health = max(0, target.health - modified_damage)
 	
 	# Calculate actual damage dealt (avoid negative health)
-	var actual_damage = original_health - max(0, target.health)
+	var actual_damage = original_health - target.health
 	
 	print("Target hit for ", actual_damage, " damage. Health remaining: ", target.health)
 	
 	# Update visual representation of health
 	if visual_manager:
+		# Show damage numbers and update health bars
 		visual_manager.show_weapon_damage(target, actual_damage)
+	else:
+		# Direct update through weapon manager as fallback
+		weapon_manager.update_weapon_health_display(target)
 	
 	# Check if target is destroyed
 	if target.health <= 0:

@@ -13,6 +13,9 @@ var max_health = 10.0  # Default max health
 # Add this function to visual_manager.gd
 func initialize(weapon_types_ref):
 	weapon_types = weapon_types_ref
+	# Get reference to the board core
+	board_core = get_parent()
+	print("VisualManager initialized with weapon types reference")
 
 # And update the _ready function
 func _ready():
@@ -126,19 +129,30 @@ func create_health_bar(instance_id, grid_position, weapon_data):
 	fill.color = Color(0, 1, 0, 0.8)  # Green for full health
 	container.add_child(fill)
 	
+	# Get health value from weapon data if available
+	var health_value = max_health
+	if weapon_data is Dictionary and "health" in weapon_data:
+		health_value = weapon_data.health
+	
 	# Store health bar components
 	health_bars[instance_id] = {
 		"container": container,
 		"background": background,
 		"fill": fill,
-		"current_health": max_health,
-		"max_health": max_health
+		"current_health": health_value,
+		"max_health": health_value
 	}
+	
+	# Debug info
+	print("Health bar created for " + instance_id + " with max health: " + str(health_value))
 
 # Update health bar for a specific weapon
 func update_health_bar(instance_id, health):
 	if instance_id in health_bars:
 		var bar = health_bars[instance_id]
+		
+		# Debug info
+		print("Updating health bar for " + instance_id + " to " + str(health) + "/" + str(bar.max_health))
 		
 		# Update health value
 		bar.current_health = health
@@ -159,6 +173,8 @@ func update_health_bar(instance_id, health):
 		
 		# Make health bar visible
 		bar.container.visible = true
+	else:
+		print("Warning: Health bar not found for ID: " + instance_id)
 
 # Get health bar for a weapon
 func get_health_bar(instance_id):
@@ -201,15 +217,21 @@ func update_weapon_sprites():
 
 # Create attack animation
 func create_attack_animation(attacker_position, target_position, damage):
+	# Add debug info
+	print("Creating attack animation from " + str(attacker_position) + " to " + str(target_position) + " with damage " + str(damage))
 	board_core.visualize_attack(attacker_position, target_position, damage)
 
 # Show damage on a weapon
 func show_weapon_damage(weapon, damage):
 	if !weapon or !("data" in weapon) or !("position" in weapon) or !("player_id" in weapon):
+		print("Warning: Invalid weapon object provided to show_weapon_damage")
 		return
 	
+	# Add debug info
+	print("Showing damage on weapon at " + str(weapon.position) + ": " + str(damage) + " damage")
+	
 	# Create instance ID to find the health bar
-	var weapon_id
+	var weapon_id = "unknown"
 	
 	# Handle different ways to get the weapon ID
 	if weapon.data is Object:
@@ -217,11 +239,12 @@ func show_weapon_damage(weapon, damage):
 			weapon_id = weapon.data.get_id()
 		elif "id" in weapon.data:
 			weapon_id = weapon.data.id
-	else:
-		# Fallback
-		weapon_id = "unknown"
+	elif weapon.data is Dictionary and "id" in weapon.data:
+		weapon_id = weapon.data.id
 	
 	var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
+	
+	print("Updating health bar with ID: " + instance_id)
 	
 	# Update health bar
 	update_health_bar(instance_id, weapon.health)
