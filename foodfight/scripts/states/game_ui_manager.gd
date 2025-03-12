@@ -142,12 +142,29 @@ func handle_player_turn_started(player_id):
 	for child in targeting_buttons_container.get_children():
 		child.queue_free()
 	
-	# Get player's weapons
-	var weapons = weapon_manager.get_player_weapons(player_id)
-	print("GameUIManager: Found ", weapons.size(), " weapons for Player ", player_id + 1)
+	# Get player's offensive weapons only (explicitly exclude bases)
+	var weapons = weapon_manager.get_player_weapons(player_id, "offensive")
+	print("GameUIManager: Found ", weapons.size(), " offensive weapons for Player ", player_id + 1)
+	
+	# Double-check that no bases are included
+	var filtered_weapons = []
+	for weapon in weapons:
+		var is_base = false
+		
+		# Check if this is a base weapon
+		if typeof(weapon.data) == TYPE_DICTIONARY:
+			if "type" in weapon.data and weapon.data.type == "base":
+				is_base = true
+			elif "id" in weapon.data and str(weapon.data.id).to_lower().contains("base"):
+				is_base = true
+			elif "attack_range" in weapon.data and weapon.data.attack_range <= 0:
+				is_base = true
+		
+		if !is_base:
+			filtered_weapons.append(weapon)
 	
 	# Create a button for each weapon
-	for weapon in weapons:
+	for weapon in filtered_weapons:
 		var button = Button.new()
 		button.text = weapon.data.name
 		button.tooltip_text = "Range: " + str(weapon.data.attack_range) + "\n" + \

@@ -19,11 +19,34 @@ func _create_weapon_buttons():
 	for child in weapon_buttons_container.get_children():
 		child.queue_free()
 	
+	# Determine if we're in base placement phase
+	var is_base_placement = false
+	
+	# Try different ways to check the current state
+	if Engine.has_singleton("GameManager"):
+		var game_state_machine = Engine.get_singleton("GameManager").game_state_machine
+		if game_state_machine:
+			is_base_placement = game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT
+			print("PlacementState: Using GameManager to determine state: BASE_PLACEMENT =", is_base_placement)
+	else:
+		# Fallback method: check if weapon_placement knows it's in base placement phase
+		if weapon_placement and "is_base_placement_phase" in weapon_placement:
+			is_base_placement = weapon_placement.is_base_placement_phase
+			print("PlacementState: Using fallback method to determine state: BASE_PLACEMENT =", is_base_placement)
+	
 	# Get the appropriate weapons for placement
 	var weapons_to_show = []
 	
-	# For safety, always filter out base weapons
-	weapons_to_show = _get_non_base_weapons()
+	if is_base_placement:
+		print("PlacementState: In BASE_PLACEMENT phase - showing only base")
+		# Only show base weapon during base placement phase
+		var base_weapon = weapon_types.get_base_weapon()
+		if base_weapon:
+			weapons_to_show.append(base_weapon)
+	else:
+		print("PlacementState: In WEAPON_PLACEMENT phase - excluding bases")
+		# Only show non-base weapons during regular weapon placement
+		weapons_to_show = _get_non_base_weapons()
 	
 	# Create a button for each weapon type
 	for weapon in weapons_to_show:
@@ -38,8 +61,18 @@ func _create_weapon_buttons():
 func _get_non_base_weapons():
 	var non_base_weapons = []
 	for weapon in weapon_types.get_all_weapons():
-		if "type" in weapon and weapon.type != "base":
+		var is_base = false
+		
+		# More thoroughly check if it's a base
+		if "type" in weapon and weapon.type == "base":
+			is_base = true
+		elif "id" in weapon and str(weapon.id).to_lower().contains("base"):
+			is_base = true
+		
+		if !is_base:
 			non_base_weapons.append(weapon)
+			
+	print("PlacementState: Found", non_base_weapons.size(), "non-base weapons")
 	return non_base_weapons
 
 # Handle weapon selection button press

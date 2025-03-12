@@ -27,6 +27,12 @@ var main_scene_path = "res://scenes/main.tscn"
 
 func _ready():
 	print("GameManager singleton initialized")
+	
+	# Make sure this instance is available as a singleton
+	if not Engine.has_singleton("GameManager"):
+		print("Registering GameManager singleton")
+		Engine.register_singleton("GameManager", self)
+	
 	get_tree().root.ready.connect(_on_scene_tree_ready)
 
 func _on_scene_tree_ready():

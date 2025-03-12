@@ -71,8 +71,48 @@ func reset_weapon_cooldowns():
 			weapon.current_cooldown = 0
 
 # Get weapons for a specific player
-func get_player_weapons(player_id):
-	return player_weapons[player_id]
+func get_player_weapons(player_id, filter_type=null):
+	if filter_type == null:
+		return player_weapons[player_id]
+	
+	var filtered_weapons = []
+	for weapon in player_weapons[player_id]:
+		# Determine the weapon type
+		var weapon_type = ""
+		var is_base = false
+		
+		# Check different ways to identify weapon type
+		if weapon.data is Object:
+			if "type" in weapon.data:
+				weapon_type = weapon.data.type
+			elif weapon.data.has_method("get_type"):
+				weapon_type = weapon.data.get_type()
+			
+			# Additional check for base
+			if weapon_type == "":
+				if "id" in weapon.data:
+					is_base = str(weapon.data.id).to_lower().contains("base")
+		elif typeof(weapon.data) == TYPE_DICTIONARY:
+			if "type" in weapon.data:
+				weapon_type = weapon.data.type
+			elif "id" in weapon.data:
+				is_base = str(weapon.data.id).to_lower().contains("base")
+		
+		# If it's a base, override the type
+		if is_base:
+			weapon_type = "base"
+		
+		# Add weapon if it matches the filter
+		if filter_type == "offensive":
+			if weapon_type == "offensive" or (weapon_type != "base" and weapon.data.attack_range > 0):
+				filtered_weapons.append(weapon)
+		elif filter_type == "!base":
+			if weapon_type != "base":
+				filtered_weapons.append(weapon)
+		elif filter_type == weapon_type:
+			filtered_weapons.append(weapon)
+	
+	return filtered_weapons
 
 # Get all weapons
 func get_all_weapons():

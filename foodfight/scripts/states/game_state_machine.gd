@@ -123,15 +123,22 @@ func _apply_state_change(new_state):
 			print("Starting weapon placement phase for " + get_current_player_name())
 			weapon_placement.start_placement_phase(current_player_index)
 				
-			# Force refresh of the placement state - safely handle the call for testing
+			# Force refresh of the placement state
 			if Engine.has_singleton("GameManager"):
 				var game_manager = Engine.get_singleton("GameManager")
-				if game_manager and game_manager.placement_state and game_manager.placement_state.has_method("_create_weapon_buttons"):
+				if game_manager and game_manager.placement_state:
 					game_manager.placement_state._create_weapon_buttons()
+					print("Successfully called placement_state._create_weapon_buttons()")
 				else:
-					print("Skipping weapon button creation - not available in test environment")
+					print("GameManager found but placement_state not available")
 			else:
-				print("GameManager singleton not found - skipping weapon button creation")
+				print("GameManager singleton not found - manual refresh required")
+				# Direct refresh if possible
+				if weapon_placement and weapon_placement.get_parent() and weapon_placement.get_parent().has_node("PlacementState"):
+					var placement_state = weapon_placement.get_parent().get_node("PlacementState")
+					if placement_state and placement_state.has_method("_create_weapon_buttons"):
+						placement_state._create_weapon_buttons()
+						print("Used alternative method to refresh weapon buttons")
 			
 		GameState.TARGETING:
 			print("Starting targeting phase...")
@@ -199,9 +206,30 @@ func _on_resource_updated(player_id, amount):
 func _on_base_placement_complete(player_id):
 	print("Base placement completed for Player ", player_id + 1)
 	
+	# Check if base placement was actually done through placement
+	# or just by clicking the end button
+	var base_placed = false
+	for x in range(game_board.grid_size.x):
+		for y in range(game_board.grid_size.y):
+			var cell = game_board.grid[x][y]
+			if cell.occupied_by and "weapon_data" in cell.occupied_by:
+				var weapon = cell.occupied_by.weapon_data
+				if "type" in weapon and weapon.type == "base" and cell.occupied_by.player_id == player_id:
+					base_placed = true
+					break
+	
+	# If player didn't actually place a base, don't proceed
+	if not base_placed:
+		print("Player " + str(player_id + 1) + " didn't place a base yet!")
+		# Restart this player's base placement phase
+		weapon_placement.start_base_placement_phase(player_id)
+		update_ui()
+		return
+	
 	# If player 1 (index 0) just finished, switch to player 2
 	if player_id == 0:
 		next_player()
+		print("Switching to Player 2's base placement turn")
 		weapon_placement.start_base_placement_phase(current_player_index)
 		update_ui()
 	# If player 2 (index 1) just finished, move to regular placement phase
@@ -229,8 +257,25 @@ func placement_completed():
 		weapon_placement.end_placement_phase()
 		_on_placement_phase_complete(current_player_index)
 	elif current_state == GameState.BASE_PLACEMENT:
-		weapon_placement.end_placement_phase()
-		_on_base_placement_complete(current_player_index)
+		# For base placement, first check if they actually placed a base
+		var base_placed = false
+		for x in range(game_board.grid_size.x):
+			for y in range(game_board.grid_size.y):
+				var cell = game_board.grid[x][y]
+				if cell.occupied_by and "weapon_data" in cell.occupied_by:
+					var weapon = cell.occupied_by.weapon_data
+					if "type" in weapon and weapon.type == "base" and cell.occupied_by.player_id == current_player_index:
+						base_placed = true
+						break
+		
+		if base_placed:
+			weapon_placement.end_placement_phase()
+			_on_base_placement_complete(current_player_index)
+		else:
+			print("Player " + str(current_player_index + 1) + " must place a base before ending the phase!")
+			# Force restart of base placement UI
+			if ui_manager:
+				ui_manager.create_base_placement_ui(current_player_index)
 
 # Handle completion of targeting phase
 func _on_targeting_completed(player_id, selected_weapons, targets):
