@@ -10,6 +10,10 @@ var weapon_sprites = {}
 var health_bars = {}
 var max_health = 10.0  # Default max health
 
+# New member variables for damage indicators
+var damage_indicators = []
+var font # Will hold reference to the damage number font
+
 # Add this function to visual_manager.gd
 func initialize(weapon_types_ref):
 	weapon_types = weapon_types_ref
@@ -22,8 +26,17 @@ func _ready():
 	# Get reference to the board core
 	board_core = get_parent()
 	
-	# Clear all weapon sprites
+	# Create default font for damage numbers
+	font = ThemeDB.fallback_font
+	
+	# Process indicators each frame
+	set_process(true)
 
+func _process(delta):
+	# Update damage indicators
+	process_damage_indicators(delta)
+
+# Clear all weapon sprites
 func clear_weapon_sprites():
 	for sprite in weapon_sprites.values():
 		if is_instance_valid(sprite):
@@ -148,33 +161,60 @@ func create_health_bar(instance_id, grid_position, weapon_data):
 
 # Update health bar for a specific weapon
 func update_health_bar(instance_id, health):
+	# First try with the exact ID
 	if instance_id in health_bars:
-		var bar = health_bars[instance_id]
+		_update_health_bar_internal(instance_id, health)
+		return true
+	
+	# If not found, try to find a matching health bar by position
+	var parts = instance_id.split("_")
+	if parts.size() >= 4:
+		var player_id = parts[0]
+		var x = parts[2]
+		var y = parts[3]
 		
-		# Debug info
-		print("Updating health bar for " + instance_id + " to " + str(health) + "/" + str(bar.max_health))
-		
-		# Update health value
-		bar.current_health = health
-		
-		# Calculate health percentage
-		var health_percent = clamp(health / bar.max_health, 0.0, 1.0)
-		
-		# Update health bar fill
-		bar.fill.size.x = 20 * health_percent
-		
-		# Set color based on health percentage
-		if health_percent > 0.6:
-			bar.fill.color = Color(0, 1, 0, 0.8)  # Green for high health
-		elif health_percent > 0.3:
-			bar.fill.color = Color(1, 1, 0, 0.8)  # Yellow for medium health
-		else:
-			bar.fill.color = Color(1, 0, 0, 0.8)  # Red for low health
-		
-		# Make health bar visible
-		bar.container.visible = true
+		# Try to find any health bar with the same position and player
+		for id in health_bars.keys():
+			var bar_parts = id.split("_")
+			if bar_parts.size() >= 4 and bar_parts[0] == player_id and bar_parts[2] == x and bar_parts[3] == y:
+				print("Found alternative health bar ID: " + id + " instead of " + instance_id)
+				_update_health_bar_internal(id, health)
+				return true
+	
+	print("Warning: Health bar not found for ID: " + instance_id)
+	return false
+
+# Internal method to update the health bar's appearance
+func _update_health_bar_internal(bar_id, health):
+	var bar = health_bars[bar_id]
+	
+	# Debug info
+	print("Updating health bar for " + bar_id + " to " + str(health) + "/" + str(bar.max_health))
+	
+	# Update health value
+	bar.current_health = health
+	
+	# Calculate health percentage
+	var health_percent = clamp(health / bar.max_health, 0.0, 1.0)
+	
+	# Smoothly animate the health bar
+	var tween = create_tween()
+	tween.tween_property(bar.fill, "size:x", 20 * health_percent, 0.3)
+	
+	# Set color based on health percentage
+	var target_color
+	if health_percent > 0.6:
+		target_color = Color(0, 1, 0, 0.8)  # Green for high health
+	elif health_percent > 0.3:
+		target_color = Color(1, 1, 0, 0.8)  # Yellow for medium health
 	else:
-		print("Warning: Health bar not found for ID: " + instance_id)
+		target_color = Color(1, 0, 0, 0.8)  # Red for low health
+	
+	# Animate color change
+	tween.parallel().tween_property(bar.fill, "color", target_color, 0.3)
+	
+	# Make health bar visible
+	bar.container.visible = true
 
 # Get health bar for a weapon
 func get_health_bar(instance_id):
@@ -251,3 +291,87 @@ func show_weapon_damage(weapon, damage):
 	
 	# Show damage indicator on the grid
 	board_core.show_impact(weapon.position, damage)
+
+# Process floating damage indicators
+func process_damage_indicators(delta):
+	var i = 0
+	while i < damage_indicators.size():
+		var indicator = damage_indicators[i]
+		
+		# Move upward
+		indicator.position.y -= 30 * delta
+		
+		# Fade out
+		indicator.modulate.a -= delta * 0.8
+		
+		# Remove if fully transparent
+		if indicator.modulate.a <= 0:
+			indicator.queue_free()
+			damage_indicators.remove_at(i)
+		else:
+			i += 1
+
+# Show impact and damage number at a position
+func show_impact(position, damage):
+	# Check if impact is zero - don't show for misses
+	if damage <= 0:
+		print("No damage to display at ", position)
+		return
+	
+	# Convert grid position to world position
+	var world_pos = board_core.grid_to_world(position)
+	world_pos += board_core.cell_size / 2  # Center in the cell
+	
+	# Create damage label
+	var damage_label = Label.new()
+	damage_label.text = str(int(damage))
+	
+	# Style the label
+	damage_label.add_theme_font_override("font", font)
+	damage_label.add_theme_font_size_override("font_size", 16)
+	
+	# Set color based on damage amount
+	if damage >= 10:
+		damage_label.add_theme_color_override("font_color", Color(1.0, 0.0, 0.0)) # Red for high damage
+	elif damage >= 5:
+		damage_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.0)) # Orange for medium
+	else:
+		damage_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.0)) # Yellow for low
+	
+	# Set position
+	damage_label.position = world_pos
+	damage_label.position.y -= 10  # Start slightly above target
+	
+	# Center the label
+	damage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	damage_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	# Add to the scene
+	board_core.add_child(damage_label)
+	
+	# Add to indicators list for animation
+	damage_indicators.append(damage_label)
+	
+	# Optional: Add a slight impact effect (like a flash)
+	var impact_sprite = find_weapon_at_position(position)
+	if impact_sprite and is_instance_valid(impact_sprite):
+		# Flash the sprite
+		var original_modulate = impact_sprite.modulate
+		impact_sprite.modulate = Color(1.5, 1.5, 1.5, 1)  # Bright flash
+		
+		# Create a timer to revert the flash
+		var timer = get_tree().create_timer(0.15)
+		await timer.timeout
+		if is_instance_valid(impact_sprite):
+			impact_sprite.modulate = original_modulate
+
+# Find weapon sprite at a grid position
+func find_weapon_at_position(grid_pos):
+	for id in weapon_sprites.keys():
+		var parts = id.split("_")
+		if parts.size() >= 4:
+			var x = int(parts[2])
+			var y = int(parts[3])
+			if x == grid_pos.x and y == grid_pos.y:
+				return weapon_sprites[id]
+	return null

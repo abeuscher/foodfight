@@ -187,6 +187,49 @@ func is_valid_target(cell):
 			return true
 	return false
 
+# Check if a target is in range of a weapon at a specific position
+func is_in_range(weapon_position, target_position, weapon_data):
+	# Calculate distance between weapon and target
+	var distance = calculate_distance(weapon_position, target_position)
+	
+	# Check if target is within weapon's attack range
+	if "attack_range" in weapon_data and distance <= weapon_data.attack_range:
+		# For valid targeting in AI, also check if the target is on enemy territory
+		var cell = game_board.grid[target_position.x][target_position.y] if target_position.x < game_board.grid_size.x and target_position.y < game_board.grid_size.y else null
+		
+		if cell:
+			# Get the enemy player ID (whoever owns the weapon)
+			var weapon_player_id = -1
+			if "player_id" in weapon_data:
+				weapon_player_id = weapon_data.player_id
+			
+			# If we don't know the player ID, calculate it based on position
+			if weapon_player_id == -1:
+				# Assume player 0 is on the left side, player 1 on the right
+				weapon_player_id = 0 if weapon_position.x < game_board.grid_size.x / 2 else 1
+			
+			# Target is valid if it's on the enemy's side
+			var enemy_player_id = 1 - weapon_player_id
+			
+			# Use cell_manager if available
+			if game_board.cell_manager:
+				return game_board.cell_manager.is_player_territory(target_position, enemy_player_id) and distance <= weapon_data.attack_range
+			
+			# Fallback to simple territory check
+			var is_enemy_territory = false
+			
+			# Quick check based on board position
+			if enemy_player_id == 0:
+				# Left side
+				is_enemy_territory = target_position.x < game_board.grid_size.x / 2
+			else:
+				# Right side
+				is_enemy_territory = target_position.x >= game_board.grid_size.x / 2
+				
+			return is_enemy_territory and distance <= weapon_data.attack_range
+	
+	return false
+
 # Clear targeting visuals
 func clear_targeting_visuals():
 	hover_cell = null

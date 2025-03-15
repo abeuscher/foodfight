@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://pdr201r5pdmg"]
+[gd_scene load_steps=18 format=3 uid="uid://pdr201r5pdmg"]
 
 [ext_resource type="Script" uid="uid://xbsa68mc8mvt" path="res://scripts/main.gd" id="1_0aq6d"]
 [ext_resource type="PackedScene" uid="uid://c888idx4rii4b" path="res://scenes/game_board.tscn" id="2_irwmq"]
@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://scripts/states/targeting_state.gd" id="15_targst"]
 [ext_resource type="Script" uid="uid://y054nay23flq" path="res://scripts/weapons/weapon_visualization.gd" id="14_lcdmi"]
 [ext_resource type="PackedScene" path="res://scenes/title_screen.tscn" id="16_title"]
+[ext_resource type="Script" path="res://scripts/ai/ai_opponent.gd" id="17_ai_opp"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_0aq6d")
@@ -51,6 +52,9 @@ script = ExtResource("5_t72fw")
 
 [node name="WeaponVisualization" type="Node" parent="WeaponPlacement"]
 script = ExtResource("14_lcdmi")
+
+[node name="AIOpponent" type="Node" parent="."]
+script = ExtResource("17_ai_opp")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -113,16 +117,6 @@ horizontal_alignment = 1
 [node name="ScoreLabel" type="Label" parent="UI/TopBar/HBoxContainer/Player2Container"]
 layout_mode = 2
 text = "Score: 0"
-horizontal_alignment = 1
-
-[node name="ResourceContainer" type="VBoxContainer" parent="UI/TopBar/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-alignment = 1
-
-[node name="ResourceLabel" type="Label" parent="UI/TopBar/HBoxContainer/ResourceContainer"]
-layout_mode = 2
-text = "Resources: 10"
 horizontal_alignment = 1
 
 [node name="TitleScreen" parent="UI" instance=ExtResource("16_title")]

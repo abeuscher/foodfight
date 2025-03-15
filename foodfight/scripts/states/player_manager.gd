@@ -6,9 +6,9 @@ var player2_name = ""
 var current_player = 1  # 1 or 2 for display purposes
 var current_player_index = 0  # 0 or 1 for array indexing
 
-# Player scores
-var player1_score = 0
-var player2_score = 0
+# Player ingredients (consolidated from separate score and resources)
+var player1_ingredients = 25  # Starting ingredients
+var player2_ingredients = 25  # Starting ingredients
 
 # Game result
 var winning_player = -1  # -1 = no winner yet, 0 = player 1, 1 = player 2
@@ -59,34 +59,42 @@ func get_current_player_name():
 func get_player_name(player_idx):
 	return player1_name if player_idx == 0 else player2_name
 
-# Update player score
-func update_score(player, points):
-	if player == 1:
-		player1_score += points
-	else:
-		player2_score += points
-
-# Add points to a player's score
-func add_points(player_id, points):
+# Add ingredients to a player
+func add_ingredients(player_id, amount):
 	if player_id == 0:
-		player1_score += points
-		print("Added ", points, " points to Player 1. New score: ", player1_score)
+		player1_ingredients += amount
+		print("Added ", amount, " ingredients to Player 1. New total: ", player1_ingredients)
 	else:
-		player2_score += points
-		print("Added ", points, " points to Player 2. New score: ", player2_score)
+		player2_ingredients += amount
+		print("Added ", amount, " ingredients to Player 2. New total: ", player2_ingredients)
+
+# Get player ingredients
+func get_player_ingredients(player_id):
+	return player1_ingredients if player_id == 0 else player2_ingredients
+
+# Legacy methods mapped to new ingredients system
+func add_points(player_id, points):
+	add_ingredients(player_id, points)
+
+func add_resources(player_id, resources):
+	# No separate action needed - already handled by add_ingredients
+	pass
+
+func get_player_resources(player_id):
+	return get_player_ingredients(player_id)
 
 # Set the winning player
 func set_winner(player_id):
 	winning_player = player_id
 	var winner_name = get_player_name(player_id)
-	print("Game over! ", winner_name, " wins with a score of ", 
-		player1_score if player_id == 0 else player2_score)
+	print("Game over! ", winner_name, " wins with ", 
+		player1_ingredients if player_id == 0 else player2_ingredients, " ingredients")
 
 # Reset the game state
 func reset_game():
-	# Reset scores
-	player1_score = 0
-	player2_score = 0
+	# Reset ingredients
+	player1_ingredients = 25  # Starting ingredients
+	player2_ingredients = 25  # Starting ingredients
 	
 	# Reset player turn
 	reset_current_player()

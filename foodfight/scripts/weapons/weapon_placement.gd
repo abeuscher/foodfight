@@ -1,7 +1,7 @@
 extends Node
 
 signal weapon_placed(player_id, weapon_data, position)
-signal resource_updated(player_id, amount)
+signal ingredients_updated(player_id, amount)  # Renamed from resource_updated
 
 # References
 var game_board
@@ -63,7 +63,7 @@ func start_base_placement_phase(player_id):
 		base_placement_complete = [false, false]
 	
 	# Don't consume resources for base placement
-	emit_signal("resource_updated", player_id, player_resources[player_id])
+	emit_signal("ingredients_updated", player_id, player_resources[player_id])
 
 # Start the placement phase for a player
 func start_placement_phase(player_id):
@@ -81,7 +81,7 @@ func start_placement_phase(player_id):
 		player_resources[1] = 30
 	
 	# Signal resource amount to update UI
-	emit_signal("resource_updated", player_id, player_resources[player_id])
+	emit_signal("ingredients_updated", player_id, player_resources[player_id])
 
 # End the placement phase for the current player
 func end_placement_phase():
@@ -146,7 +146,7 @@ func attempt_weapon_placement(global_pos):
 			
 			# Deduct resources
 			player_resources[current_player_id] -= cost
-			emit_signal("resource_updated", current_player_id, player_resources[current_player_id])
+			emit_signal("ingredients_updated", current_player_id, player_resources[current_player_id])
 		else:
 			print("Not enough resources to place this weapon")
 	else:
@@ -310,8 +310,37 @@ func select_weapon_for_placement(weapon_id):
 			selected_weapon = weapon
 			print("Selected weapon for placement: ", weapon.name)
 
-# Get current player resources
+# Get player ingredients (renamed from get_player_resources)
 func get_player_resources(player_id):
+	# Use player manager's ingredients
+	if GameManager and GameManager.player_manager:
+		return GameManager.player_manager.get_player_ingredients(player_id)
+	
+	# Fallback to previous implementation
 	if player_id < 0 or player_id >= player_resources.size():
 		return 0
 	return player_resources[player_id]
+
+# Deduct ingredients when placing a weapon (renamed from deduct_resources)
+func deduct_resources(player_id, cost):
+	if GameManager and GameManager.player_manager:
+		# Directly modify ingredients in player_manager
+		var current_ingredients = GameManager.player_manager.get_player_ingredients(player_id)
+		var new_ingredients = current_ingredients - cost
+		
+		# Update player_manager ingredients
+		if player_id == 0:
+			GameManager.player_manager.player1_ingredients = new_ingredients
+		else:
+			GameManager.player_manager.player2_ingredients = new_ingredients
+		
+		# Emit signal for UI update
+		if GameManager.game_state_machine:
+			GameManager.game_state_machine._on_resource_updated(player_id, new_ingredients)
+		
+		return new_ingredients
+	
+	# Fallback to previous implementation
+	var new_resources = player_resources[player_id] - cost
+	player_resources[player_id] = new_resources
+	return new_resources

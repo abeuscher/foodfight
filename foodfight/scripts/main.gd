@@ -8,17 +8,96 @@ extends Node2D
 @onready var phase_label = $UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel
 @onready var turn_label = $UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel
 
+# References to components - use same property names as game_manager.gd
+@onready var game_board = $GameBoard
+@onready var game_state_machine = $GameStateMachine
+@onready var game_ui_manager = $GameUIManager  # Changed from ui_manager
+@onready var player_manager = $PlayerManager
+@onready var placement_state = $PlacementState
+@onready var targeting_state = $TargetingState
+@onready var attack_state = $AttackState
+@onready var weapon_types = $WeaponTypes
+@onready var weapon_placement = $WeaponPlacement
+@onready var ai_opponent = $AIOpponent
+
 # State tracking
 var game_initialized = false
 
 func _ready():
-	print("Main scene ready")
+	print("Main scene loaded. Initializing game...")
 	
+	# Register the GameManager singleton
+	if not Engine.has_singleton("GameManager"):
+		var game_manager = Node.new()
+		game_manager.name = "GameManager"
+		Engine.register_singleton("GameManager", game_manager)
+	
+	var game_manager = Engine.get_singleton("GameManager")
+	
+	# Store references in GameManager (property names must match)
+	game_manager.game_board = game_board
+	game_manager.game_state_machine = game_state_machine
+	game_manager.game_ui_manager = game_ui_manager  # Changed from ui_manager
+	game_manager.player_manager = player_manager
+	game_manager.placement_state = placement_state
+	game_manager.targeting_state = targeting_state
+	game_manager.attack_state = attack_state
+	game_manager.weapon_types = weapon_types
+	game_manager.weapon_placement = weapon_placement
+	
+	# Initialize AI opponent
+	game_manager.ai_opponent = ai_opponent
+	ai_opponent.initialize(
+		game_board,
+		weapon_types,
+		weapon_placement,
+		player_manager,
+		attack_state.get_node("TargetingManager")
+	)
+	
+	# Connect AI signals to UI manager
+	game_ui_manager.connect_ai_signals(ai_opponent)
+	
+	# Initialize the core game components (update ui_manager to game_ui_manager)
+	game_state_machine.initialize(
+		game_board, 
+		weapon_types, 
+		weapon_placement, 
+		targeting_state,
+		attack_state,
+		game_ui_manager,
+		player_manager
+	)
+	
+	# Fix: Initialize placement_state with the correct 3 arguments
+	placement_state.initialize(
+		weapon_types, 
+		weapon_placement,
+		weapon_buttons_container  # Use the buttons container, not game_ui_manager
+	)
+	
+	# Fix: Remove the fourth argument (game_ui_manager) to match the function signature
+	targeting_state.initialize(
+		game_board,
+		attack_state.get_node("WeaponManager"),
+		attack_state.get_node("TargetingManager")
+	)
+	
+	# Start the game
+	game_state_machine.start_game()
+
 	# Allow a frame to ensure all nodes are ready
 	await get_tree().process_frame
 
 	# Set up UI elements
 	_setup_ui()
+	
+	# Immediately update the player 2 label to show AI
+	var player2_label = $UI/TopBar/HBoxContainer/Player2Container/NameLabel
+	if player2_label:
+		player2_label.text = "AI OPPONENT"
+		player2_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))  # Make it red
+		print("Updated Player 2 label to AI OPPONENT")
 	
 	# Initialize the game through GameManager singleton
 	if GameManager:
