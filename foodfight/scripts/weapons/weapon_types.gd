@@ -148,3 +148,13 @@ func get_type(weapon_id):
 	if weapon and "type" in weapon:
 		return weapon.type
 	return ""
+
+# Get weapons available to a specific player
+func get_weapons_for_player(player_id):
+	var player_weapons = []
+	
+	# For now, return all weapons - in future could filter by player-specific weapons
+	for weapon in available_weapons:
+		player_weapons.append(weapon)
+	
+	return player_weapons

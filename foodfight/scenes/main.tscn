@@ -195,3 +195,22 @@ text = "End Targeting"
 
 [node name="GameBoard" parent="." instance=ExtResource("2_irwmq")]
 position = Vector2(0, 70)
+
+[node name="AIThinkingIndicator" type="Label" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -50.0
+offset_right = 100.0
+offset_bottom = 0.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_4jnuh")
+theme_override_colors/font_color = Color(1, 0.2, 0.2, 1)
+theme_override_font_sizes/font_size = 24
+text = "AI is thinking..."
+horizontal_alignment = 1

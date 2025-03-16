@@ -2,7 +2,6 @@
 
 ## Game Modes
 - Single-player: Player vs. AI opponent
-- Two-player: Two human players (local)
 
 ## Fundamental Game Loop
 
@@ -11,17 +10,16 @@
 - Players receive starting resources
 
 ### 2. Resource & Build Phase
-- Players collect resources based on their production structures
+- Players collect ingredients based on their production structures
 - Players place new structures or upgrade existing ones on their island
-- Building options limited by available resources and grid space
+- Building options limited by available ingredients and grid space
 - AI makes strategic decisions in single-player mode
 
 ### 3. Targeting Phase
 - Player selects up to 3 offensive weapons to deploy
 - Player assigns targets on the enemy island
 - Targeting interface shows weapon range, damage patterns, and valid cells
-- In two-player mode, players take turns planning attacks
-- In single-player mode, AI determines its targets while player is targeting
+- AI determines its targets while player is targeting
 
 ### 4. Attack Resolution Phase
 - Attacks are visualized with appropriate effects
@@ -39,11 +37,11 @@
 - **Bases**: Primary objective structures (game ends when all are destroyed)
 - **Offensive**: Various attack options with different ranges, damage patterns, and costs
 - **Defensive**: Intercept incoming attacks or damage attacking units
-- **Production**: Generate resources each turn
+- **Production**: Generate ingredients each turn
 - **Support**: Enhance effectiveness of other structures
 
 ### Resource System
-- **Building Resources**: For constructing and upgrading structures
+- **Ingredients**: For constructing and upgrading structures
 - **Energy**: Required for launching attacks and activating special abilities
 
 ### Targeting System
@@ -82,8 +80,11 @@ GameManager (Singleton)
 ├─ Initializes & References → AttackState
 ├─ Initializes & References → WeaponTypes
 ├─ Initializes & References → WeaponPlacement
+├─ Initializes & References → AIOpponent
 ├─ References → WeaponManager (via AttackState)
-└─ References → TargetingManager (via AttackState)
+├─ References → TargetingManager (via AttackState)
+├─ References → TurnManager (via GameStateMachine)
+└─ References → AIController (via GameStateMachine)
 
 Main (Scene Root)
 ├─ Calls → GameManager.initialize_game()
@@ -97,7 +98,30 @@ GameStateMachine
 ├─ Depends on → TargetingState
 ├─ Depends on → AttackState
 ├─ Depends on → GameUIManager
-└─ Depends on → PlayerManager
+├─ Depends on → PlayerManager
+├─ Contains → TurnManager
+└─ Contains → AIController
+
+GameUIManager
+├─ Coordinates → BaseUIManager
+├─ Delegates to → PlayerUIManager
+├─ Delegates to → PhaseUIManager
+├─ Delegates to → PlacementUIManager
+├─ Delegates to → TargetingUIManager
+└─ Delegates to → AIUIManager
+
+BaseUIManager (Core UI Coordinator)
+├─ Contains → PlayerUIManager
+├─ Contains → PhaseUIManager
+├─ Contains → PlacementUIManager
+├─ Contains → TargetingUIManager
+└─ Contains → AIUIManager
+
+AIController
+├─ Depends on → AIOpponent
+├─ Depends on → GameStateMachine
+├─ Depends on → PlayerManager
+└─ Signals to → GameUIManager (via AIUIManager)
 
 PlacementState
 ├─ Depends on → WeaponTypes
@@ -132,6 +156,13 @@ WeaponPlacement
 ├─ Depends on → GameBoard
 ├─ Depends on → WeaponTypes
 └─ Contains → WeaponVisualization
+
+AIOpponent
+├─ Depends on → GameBoard
+├─ Depends on → WeaponTypes
+├─ Depends on → WeaponPlacement
+├─ Depends on → PlayerManager
+└─ Depends on → TargetingManager
 ```
 
 ## Directory Structure
@@ -141,12 +172,17 @@ FoodFight/
 ├── assets/
 │   └── icon.svg
 ├── resources/
-│   └── food_theme.tres
+│   └── theme.tres
 ├── scenes/
 │   ├── game_board.tscn
 │   ├── main.tscn
-│   └── start_screen.tscn
+│   ├── start_screen.tscn
+│   └── title_screen.tscn
 └── scripts/
+    ├── ai/
+    │   ├── ai_controller.gd
+    │   ├── ai_opponent.gd
+    │   └── ai_ui_manager.gd
     ├── game_board/
     │   ├── board_core.gd
     │   ├── cell_manager.gd
@@ -160,7 +196,16 @@ FoodFight/
     │   ├── player_manager.gd
     │   ├── targeting_manager.gd
     │   ├── targeting_state.gd
+    │   ├── turn_manager.gd
     │   └── weapon_manager.gd
+    ├── ui/
+    │   ├── base_ui_manager.gd
+    │   ├── game_ui_manager.gd
+    │   ├── phase_ui_manager.gd
+    │   ├── placement_ui_manager.gd
+    │   ├── player_ui_manager.gd
+    │   ├── targeting_ui_manager.gd
+    │   └── title_screen.gd
     ├── weapons/
     │   ├── weapon_attack.gd
     │   ├── weapon_placement.gd

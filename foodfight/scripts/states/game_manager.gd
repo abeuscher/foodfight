@@ -26,9 +26,19 @@ var targeting_manager
 var turn_manager
 var ai_controller
 
+# UI manager sub-components
+var base_ui_manager
+var player_ui_manager
+var phase_ui_manager
+var placement_ui_manager
+var targeting_ui_manager
+var ai_ui_manager
+
 # State tracking
 var initialization_complete = false
 var main_scene_path = "res://scenes/main.tscn"
+var is_single_player = true  # Now always true - we're converting to single-player only
+var ai_difficulty = 1  # 0=easy, 1=medium, 2=hard
 
 func _ready():
 	if not Engine.has_singleton("GameManager"):
@@ -85,6 +95,9 @@ func initialize_components():
 	emit_signal("component_initialized", "GameBoard")
 	
 	# 2. Initialize player manager (no dependencies)
+	# Configure player 2 as AI
+	player_manager.set_player_type(1, player_manager.PlayerType.AI)
+	player_manager.set_player_name(1, "AI OPPONENT")
 	emit_signal("component_initialized", "PlayerManager")
 	
 	# 3. Initialize weapon systems
@@ -114,6 +127,18 @@ func initialize_components():
 	attack_state.initialize(game_board, weapon_types)
 	emit_signal("component_initialized", "AttackState")
 	
+	# 9. Initialize AI opponent with the appropriate difficulty
+	if ai_opponent:
+		ai_opponent.initialize(
+			game_board, 
+			weapon_types, 
+			weapon_placement, 
+			player_manager, 
+			targeting_manager
+		)
+		ai_opponent.set_difficulty(ai_difficulty)
+		emit_signal("component_initialized", "AIOpponent")
+	
 	# 10. Initialize game state machine (depends on everything)
 	game_state_machine.initialize(
 		game_board,
@@ -124,19 +149,25 @@ func initialize_components():
 		game_ui_manager,
 		player_manager
 	)
+	
+	# Set single player mode in game state machine
+	game_state_machine.set_single_player_mode(true)
+	
 	emit_signal("component_initialized", "GameStateMachine")
 	
 	# Get references to turn_manager and ai_controller after game_state_machine initialization
 	turn_manager = game_state_machine.turn_manager
 	ai_controller = game_state_machine.ai_controller
 	
-	# Initialize AI opponent (after game components are ready)
-	if ai_opponent:
-		ai_opponent.initialize(game_board, weapon_types, weapon_placement, player_manager, targeting_manager)
-		emit_signal("component_initialized", "AIOpponent")
 	
 	# 11. Connect signals between components
 	connect_component_signals()
+	
+	# 12. Make sure UI is updated correctly for the initial game state
+	if game_ui_manager:
+		print("Ensuring UI is properly set up for initial state: BASE_PLACEMENT")
+		# Use update_ui instead of update_for_state
+		game_ui_manager.update_ui(game_state_machine.GameState.BASE_PLACEMENT, 0)
 	
 	return true
 
@@ -147,11 +178,13 @@ func connect_component_signals():
 	# Connect UI buttons
 	connect_ui_buttons(main_scene)
 	
-	# Connect gameplay signals
-	connect_gameplay_signals()
-	
 	# Connect targeting state to game_ui_manager
-	targeting_state.connect("player_turn_started", Callable(game_ui_manager, "handle_player_turn_started"))
+	targeting_state.connect("player_turn_started", Callable(game_ui_manager, "handle_player_turn_update"))
+	
+	# Connect AI signals
+	if ai_opponent:
+		ai_opponent.connect("thinking_started", Callable(game_ui_manager, "show_ai_thinking"))
+		ai_opponent.connect("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking"))
 
 # Helper function to connect UI buttons
 func connect_ui_buttons(main_scene):
@@ -170,27 +203,6 @@ func connect_ui_buttons(main_scene):
 	
 	# End targeting button
 	var end_targeting_button = main_scene.get_node("UI/BottomBar/EndTargetingButton")
-	end_targeting_button.pressed.connect(Callable(targeting_state, "on_end_targeting_button_pressed"))
-
-# Helper function to connect gameplay signals
-func connect_gameplay_signals():
-	# Weapon placement signals
-	weapon_placement.connect("weapon_placed", Callable(game_state_machine, "_on_weapon_placed"))
-	weapon_placement.connect("resource_updated", Callable(game_state_machine, "_on_resource_updated"))
-	
-	# Targeting state signals
-	targeting_state.connect("targeting_completed", Callable(game_state_machine, "_on_targeting_completed"))
-	
-	# Targeting manager signals
-	targeting_manager.connect("target_selected", Callable(targeting_state, "_on_target_selected"))
-	
-	# Attack state signals
-	attack_state.connect("attack_completed", Callable(game_state_machine, "_on_attack_completed"))
-	
-	# Connect title screen signals
-	game_ui_manager.connect("title_screen_completed", Callable(game_state_machine, "_on_title_screen_completed"))
-	
-	# Connect turn_manager signals
 	if turn_manager:
 		turn_manager.connect("player_changed", Callable(game_ui_manager, "update_player_ui"))
 	

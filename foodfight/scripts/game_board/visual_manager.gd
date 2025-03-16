@@ -19,7 +19,6 @@ func initialize(weapon_types_ref):
 	weapon_types = weapon_types_ref
 	# Get reference to the board core
 	board_core = get_parent()
-	print("VisualManager initialized with weapon types reference")
 
 # And update the _ready function
 func _ready():
@@ -155,9 +154,6 @@ func create_health_bar(instance_id, grid_position, weapon_data):
 		"current_health": health_value,
 		"max_health": health_value
 	}
-	
-	# Debug info
-	print("Health bar created for " + instance_id + " with max health: " + str(health_value))
 
 # Update health bar for a specific weapon
 func update_health_bar(instance_id, health):
@@ -177,19 +173,14 @@ func update_health_bar(instance_id, health):
 		for id in health_bars.keys():
 			var bar_parts = id.split("_")
 			if bar_parts.size() >= 4 and bar_parts[0] == player_id and bar_parts[2] == x and bar_parts[3] == y:
-				print("Found alternative health bar ID: " + id + " instead of " + instance_id)
 				_update_health_bar_internal(id, health)
 				return true
 	
-	print("Warning: Health bar not found for ID: " + instance_id)
 	return false
 
 # Internal method to update the health bar's appearance
 func _update_health_bar_internal(bar_id, health):
 	var bar = health_bars[bar_id]
-	
-	# Debug info
-	print("Updating health bar for " + bar_id + " to " + str(health) + "/" + str(bar.max_health))
 	
 	# Update health value
 	bar.current_health = health
@@ -232,10 +223,6 @@ func remove_health_bar(instance_id):
 
 # Update all weapon sprites and health bars on the board
 func update_weapon_sprites():
-	# This function is called after changes to weapons on the board
-	if !board_core or !board_core.is_initialized:
-		return
-	
 	# Clear existing sprites
 	clear_weapon_sprites()
 	
@@ -257,34 +244,13 @@ func update_weapon_sprites():
 
 # Create attack animation
 func create_attack_animation(attacker_position, target_position, damage):
-	# Add debug info
-	print("Creating attack animation from " + str(attacker_position) + " to " + str(target_position) + " with damage " + str(damage))
 	board_core.visualize_attack(attacker_position, target_position, damage)
 
 # Show damage on a weapon
 func show_weapon_damage(weapon, damage):
-	if !weapon or !("data" in weapon) or !("position" in weapon) or !("player_id" in weapon):
-		print("Warning: Invalid weapon object provided to show_weapon_damage")
-		return
-	
-	# Add debug info
-	print("Showing damage on weapon at " + str(weapon.position) + ": " + str(damage) + " damage")
-	
 	# Create instance ID to find the health bar
-	var weapon_id = "unknown"
-	
-	# Handle different ways to get the weapon ID
-	if weapon.data is Object:
-		if weapon.data.has_method("get_id"):
-			weapon_id = weapon.data.get_id()
-		elif "id" in weapon.data:
-			weapon_id = weapon.data.id
-	elif weapon.data is Dictionary and "id" in weapon.data:
-		weapon_id = weapon.data.id
-	
+	var weapon_id = weapon.data.id
 	var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
-	
-	print("Updating health bar with ID: " + instance_id)
 	
 	# Update health bar
 	update_health_bar(instance_id, weapon.health)
@@ -315,7 +281,6 @@ func process_damage_indicators(delta):
 func show_impact(position, damage):
 	# Check if impact is zero - don't show for misses
 	if damage <= 0:
-		print("No damage to display at ", position)
 		return
 	
 	# Convert grid position to world position
@@ -354,16 +319,16 @@ func show_impact(position, damage):
 	
 	# Optional: Add a slight impact effect (like a flash)
 	var impact_sprite = find_weapon_at_position(position)
-	if impact_sprite and is_instance_valid(impact_sprite):
+	if impact_sprite:
 		# Flash the sprite
 		var original_modulate = impact_sprite.modulate
 		impact_sprite.modulate = Color(1.5, 1.5, 1.5, 1)  # Bright flash
 		
 		# Create a timer to revert the flash
-		var timer = get_tree().create_timer(0.15)
-		await timer.timeout
-		if is_instance_valid(impact_sprite):
-			impact_sprite.modulate = original_modulate
+		get_tree().create_timer(0.15).timeout.connect(func():
+			if is_instance_valid(impact_sprite):
+				impact_sprite.modulate = original_modulate
+		)
 
 # Find weapon sprite at a grid position
 func find_weapon_at_position(grid_pos):

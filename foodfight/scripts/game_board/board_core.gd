@@ -20,9 +20,6 @@ enum VISUAL_STATE {NORMAL, HOVER_VALID, HOVER_INVALID, VALID_TARGET, INVALID_TAR
 @onready var cell_manager
 @onready var visual_manager
 
-# Initialization flag
-var is_initialized = false
-
 # Attack visualization properties
 var active_attacks = []
 var attack_animation_speed = 3.0  # Cells per second
@@ -30,32 +27,21 @@ var targeted_cells = []  # Track cells that have been targeted
 var damage_indicators = []  # Track damage indicators
 
 func _ready():
-	# Wait for child nodes to be ready
-	await get_tree().process_frame
-	
 	# Get references to child nodes
-	if has_node("VisualManager"):
-		visual_manager = get_node("VisualManager")
-	else:
-		print("Warning: VisualManager not found in board_core")
+	visual_manager = get_node("VisualManager")
 	
 	# Initialize the grid with default values
 	initialize_grid()
 	
 	# Get reference to WeaponTypes
 	var main = get_node("/root/Main")
-	if main and main.has_node("WeaponTypes"):
-		var weapon_types_ref = main.get_node("WeaponTypes")
+	var weapon_types_ref = main.get_node("WeaponTypes")
 	
-		# Initialize VisualManager with the WeaponTypes reference
-		if visual_manager:
-			visual_manager.initialize(weapon_types_ref)
+	# Initialize VisualManager with the WeaponTypes reference
+	visual_manager.initialize(weapon_types_ref)
 	
 	# Position the grid to be centered in the view
 	position = Vector2(50, 80)  # Adjust based on your UI layout
-	
-	# Grid is initialized
-	is_initialized = true
 	
 	# Draw the grid
 	queue_redraw()
@@ -91,11 +77,8 @@ func initialize_grid():
 			})
 		grid.append(column)
 	
-	print("Grid initialized with size: ", grid_size)
-	
 	# If visual manager exists, initialize it
-	if visual_manager:
-		visual_manager.clear_weapon_sprites()
+	visual_manager.clear_weapon_sprites()
 
 func _draw():
 	# Draw the grid for visualization
@@ -344,14 +327,12 @@ func show_impact(position, damage):
 		"active": true
 	})
 	
-	# Reset cell visual state after a delay
-	await get_tree().create_timer(0.5).timeout
-	
-	# Only reset if it's still in damaged state (might have been changed since)
-	if is_initialized:
+	# Use a synchronous approach - schedule cell reset
+	get_tree().create_timer(0.5).timeout.connect(func():
 		var x = int(position.x)
 		var y = int(position.y)
 		if x >= 0 and x < grid_size.x and y >= 0 and y < grid_size.y:
 			if grid[x][y]["visual_state"] == VISUAL_STATE.DAMAGED:
 				grid[x][y]["visual_state"] = VISUAL_STATE.NORMAL
 				queue_redraw()
+	)

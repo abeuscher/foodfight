@@ -17,22 +17,17 @@ var targets = []
 var max_targets = 3
 
 func _ready():
-	print("TargetingState ready")
+	pass
 
 # Initialize with required references
 func initialize(p_game_board, p_weapon_manager, p_targeting_manager):
-	print("Initializing TargetingState...")
-	
 	game_board = p_game_board
 	weapon_manager = p_weapon_manager
 	targeting_manager = p_targeting_manager
-	
-	print("TargetingState initialized")
 	return true
 
 # Start targeting for a player
 func start_targeting_phase(player_id):
-	print("TargetingState: Starting targeting for Player ", player_id + 1)
 	current_player_id = player_id
 	is_targeting_active = true
 	
@@ -58,7 +53,6 @@ func select_weapon_for_targeting(weapon, player_id):
 	if !is_targeting_active:
 		return
 	
-	print("TargetingState: Weapon selected for targeting: ", weapon.data.name)
 	selected_weapon = weapon
 	
 	# Activate targeting manager
@@ -69,8 +63,6 @@ func select_weapon_for_targeting(weapon, player_id):
 func _on_target_selected(weapon, target_position):
 	if !is_targeting_active:
 		return
-	
-	print("TargetingState: Target selected at ", target_position)
 	
 	# Store the targeting information
 	selected_weapons.append(weapon)
@@ -88,7 +80,6 @@ func on_end_targeting_button_pressed():
 	if !is_targeting_active:
 		return
 	
-	print("TargetingState: Ending targeting")
 	is_targeting_active = false
 	
 	# Deactivate targeting

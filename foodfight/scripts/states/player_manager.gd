@@ -1,10 +1,14 @@
 extends Node
 
+# Player types
+enum PlayerType {HUMAN, AI}
+
 # Player information
 var player1_name = ""
 var player2_name = ""
 var current_player = 1  # 1 or 2 for display purposes
 var current_player_index = 0  # 0 or 1 for array indexing
+var player_types = [PlayerType.HUMAN, PlayerType.AI]  # Default: player 1 is human, player 2 is AI
 
 # Player ingredients (consolidated from separate score and resources)
 var player1_ingredients = 25  # Starting ingredients
@@ -25,14 +29,14 @@ func _ready():
 		else:
 			player1_name = "Player 1"
 			
-		if GameData.has_method("get_player2_name"):
+		if GameData.has_method("get_player2_name") and player_types[1] == PlayerType.HUMAN:
 			player2_name = GameData.get_player2_name()
 		else:
-			player2_name = "Player 2"
+			player2_name = "AI Opponent"
 	else:
 		# Default names if GameData isn't available
 		player1_name = "Player 1"
-		player2_name = "Player 2"
+		player2_name = "AI Opponent"
 	
 	# Initialize with player 1 as current
 	current_player = 1
@@ -58,6 +62,28 @@ func get_current_player_name():
 # Get player name by index
 func get_player_name(player_idx):
 	return player1_name if player_idx == 0 else player2_name
+
+# Set player type
+func set_player_type(player_idx, type):
+	player_types[player_idx] = type
+	# If setting player 2 to AI, update the name
+	if player_idx == 1 and type == PlayerType.AI:
+		player2_name = "AI Opponent"
+
+# Check if player is AI
+func is_ai_player(player_idx):
+	return player_types[player_idx] == PlayerType.AI
+
+# Check if current player is AI
+func is_current_player_ai():
+	return is_ai_player(current_player_index)
+
+# Set player name
+func set_player_name(player_idx, name):
+	if player_idx == 0:
+		player1_name = name
+	else:
+		player2_name = name
 
 # Add ingredients to a player
 func add_ingredients(player_id, amount):

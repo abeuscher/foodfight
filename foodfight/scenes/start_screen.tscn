@@ -94,29 +94,42 @@ theme_override_constants/separation = 6
 
 [node name="Player1Label" type="Label" parent="Panel/VBoxContainer/Player1Container"]
 layout_mode = 2
-text = "Player 1 Name:"
+text = "Your Name:"
 horizontal_alignment = 1
 
 [node name="Player1Input" type="LineEdit" parent="Panel/VBoxContainer/Player1Container"]
 layout_mode = 2
-placeholder_text = "Enter player 1 name"
+placeholder_text = "Enter your name"
 alignment = 1
 max_length = 15
 
-[node name="Player2Container" type="VBoxContainer" parent="Panel/VBoxContainer"]
+[node name="AIDifficultyContainer" type="VBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="Player2Label" type="Label" parent="Panel/VBoxContainer/Player2Container"]
+[node name="DifficultyLabel" type="Label" parent="Panel/VBoxContainer/AIDifficultyContainer"]
 layout_mode = 2
-text = "Player 2 Name:"
+text = "AI Difficulty:"
 horizontal_alignment = 1
 
-[node name="Player2Input" type="LineEdit" parent="Panel/VBoxContainer/Player2Container"]
+[node name="DifficultyOptions" type="HBoxContainer" parent="Panel/VBoxContainer/AIDifficultyContainer"]
 layout_mode = 2
-placeholder_text = "Enter player 2 name"
 alignment = 1
-max_length = 15
+
+[node name="EasyButton" type="Button" parent="Panel/VBoxContainer/AIDifficultyContainer/DifficultyOptions"]
+custom_minimum_size = Vector2(100, 40)
+layout_mode = 2
+text = "Easy"
+
+[node name="MediumButton" type="Button" parent="Panel/VBoxContainer/AIDifficultyContainer/DifficultyOptions"]
+custom_minimum_size = Vector2(100, 40)
+layout_mode = 2
+text = "Medium"
+
+[node name="HardButton" type="Button" parent="Panel/VBoxContainer/AIDifficultyContainer/DifficultyOptions"]
+custom_minimum_size = Vector2(100, 40)
+layout_mode = 2
+text = "Hard"
 
 [node name="Spacer2" type="Control" parent="Panel/VBoxContainer"]
 custom_minimum_size = Vector2(0, 15)
@@ -131,4 +144,7 @@ custom_minimum_size = Vector2(180, 60)
 layout_mode = 2
 text = "Start Game"
 
+[connection signal="pressed" from="Panel/VBoxContainer/AIDifficultyContainer/DifficultyOptions/EasyButton" to="." method="_on_easy_button_pressed"]
+[connection signal="pressed" from="Panel/VBoxContainer/AIDifficultyContainer/DifficultyOptions/MediumButton" to="." method="_on_medium_button_pressed"]
+[connection signal="pressed" from="Panel/VBoxContainer/AIDifficultyContainer/DifficultyOptions/HardButton" to="." method="_on_hard_button_pressed"]
 [connection signal="pressed" from="Panel/VBoxContainer/StartButtonContainer/StartButton" to="." method="_on_start_button_pressed"]

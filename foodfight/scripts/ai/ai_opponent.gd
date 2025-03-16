@@ -37,11 +37,15 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_player_manag
 	player_manager = p_player_manager
 	targeting_manager = p_targeting_manager
 	
-	# Connect to UI manager if available
+	# Connect signals directly instead of calling connect_ai_signals
 	if Engine.has_singleton("GameManager"):
 		var game_manager = Engine.get_singleton("GameManager")
 		if game_manager.game_ui_manager:
-			game_manager.game_ui_manager.connect_ai_signals(self)
+			# Connect thinking signals directly
+			if !is_connected("thinking_started", Callable(game_manager.game_ui_manager, "show_ai_thinking")):
+				connect("thinking_started", Callable(game_manager.game_ui_manager, "show_ai_thinking"))
+			if !is_connected("thinking_completed", Callable(game_manager.game_ui_manager, "hide_ai_thinking")):
+				connect("thinking_completed", Callable(game_manager.game_ui_manager, "hide_ai_thinking"))
 	
 	return true
 
@@ -131,36 +135,94 @@ func perform_targeting():
 # Determines where the AI should place its base
 func _determine_base_position():
 	print("AI determining base position...")
-	# Simple strategy: Place base in back row toward center
+	
+	# Get base weapon type to know its size
+	var base_type = _get_base_weapon_type()
+	if !base_type:
+		print("ERROR: Could not find base weapon type")
+		return null
+		
+	# Get game board dimensions
 	var grid_size = game_board.grid_size
-	var player_side = player_id  # Player 1 is typically on top, Player 2 on bottom
 	
-	var row = 0 if player_side == 0 else grid_size.y - 1
-	var col = int(grid_size.x / 2)  # Center column
+	# For player 2 (AI), use the right half of the board
+	var island_margin = game_board.island_margin
+	var island_size = game_board.island_size
 	
-	print("AI looking for position near: (" + str(col) + ", " + str(row) + ")")
+	# Calculate AI's territory
+	var x_start = grid_size.x - island_size.x - island_margin.x
+	var x_end = grid_size.x - island_margin.x
+	var y_start = island_margin.y
+	var y_end = island_margin.y + island_size.y
 	
-	# Look for an unoccupied spot near the center
-	for offset in [0, -1, 1, -2, 2]:
-		var try_col = col + offset
-		if try_col >= 0 and try_col < grid_size.x:
-			var cell = game_board.grid[try_col][row]
-			if not cell.occupied_by:
-				return Vector2(try_col, row)
+	# Calculate center position, but ensure it's safely inside AI territory
+	# and with enough space for the base
+	var center_x = x_start + (island_size.x / 2) - (base_type.size.x / 2)
+	var center_y = y_start + (island_size.y / 2) - (base_type.size.y / 2)
 	
-	# Fallback to first available cell in back row
-	for x in range(grid_size.x):
-		var cell = game_board.grid[x][row]
-		if not cell.occupied_by:
-			return Vector2(x, row)
+	# Round to ensure we get whole integers
+	center_x = floor(center_x)
+	center_y = floor(center_y)
 	
-	# Emergency fallback - first available cell anywhere
-	for y in range(grid_size.y):
-		for x in range(grid_size.x):
-			var cell = game_board.grid[x][y]
-			if not cell.occupied_by:
+	# Ensure we don't exceed boundaries
+	center_x = max(x_start, min(center_x, x_end - base_type.size.x))
+	center_y = max(y_start, min(center_y, y_end - base_type.size.y))
+	
+	print("AI looking for position near center of territory: (" + str(center_x) + ", " + str(center_y) + ")")
+	
+	# Check if center position is unoccupied
+	var can_place_at_center = true
+	for x in range(base_type.size.x):
+		for y in range(base_type.size.y):
+			var check_x = center_x + x
+			var check_y = center_y + y
+			
+			# Ensure we're in bounds
+			if check_x < 0 or check_x >= grid_size.x or check_y < 0 or check_y >= grid_size.y:
+				can_place_at_center = false
+				break
+				
+			var cell = game_board.grid[check_x][check_y]
+			if cell.occupied_by != null:
+				can_place_at_center = false
+				break
+	
+	if can_place_at_center:
+		print("AI will place base at center: (" + str(center_x) + ", " + str(center_y) + ")")
+		return Vector2(center_x, center_y)
+	
+	# If center position is not available, search for any valid position
+	print("Center position unavailable, searching for any valid position...")
+	
+	# Try to find an unoccupied spot starting from the back of AI territory
+	for y in range(y_start, y_end - base_type.size.y + 1):
+		for x in range(x_start, x_end - base_type.size.x + 1):
+			var can_place_here = true
+			
+			# Check if all cells needed for the base are unoccupied
+			for bx in range(base_type.size.x):
+				for by in range(base_type.size.y):
+					var check_x = x + bx
+					var check_y = y + by
+					
+					# Skip if out of bounds
+					if check_x < 0 or check_x >= grid_size.x or check_y < 0 or check_y >= grid_size.y:
+						can_place_here = false
+						break
+						
+					var cell = game_board.grid[check_x][check_y]
+					if cell.occupied_by != null:
+						can_place_here = false
+						break
+				
+				if not can_place_here:
+					break
+			
+			if can_place_here:
+				print("AI found valid base position at: (" + str(x) + ", " + str(y) + ")")
 				return Vector2(x, y)
 	
+	print("ERROR: Could not find any valid position for AI base!")
 	return null
 
 # Place a base at the specified position
@@ -169,7 +231,8 @@ func _place_base(position):
 	var base_type = _get_base_weapon_type()
 	if base_type and position:
 		print("AI using base type: " + str(base_type.name))
-		weapon_placement.place_weapon(player_id, base_type, position)
+		# FIX: Correct parameter order (weapon, position, player_id)
+		weapon_placement.place_weapon(base_type, position, player_id)
 	else:
 		print("ERROR: AI couldn't place base - base_type: " + str(base_type) + ", position: " + str(position))
 
@@ -246,7 +309,7 @@ func _determine_weapon_position(weapon_data):
 			var position = Vector2(x, y)
 			
 			# Check if position is valid for placement
-			if weapon_placement.can_place_at(player_id, weapon_data, position):
+			if weapon_placement.can_place_at_position(weapon_data, position, player_id):
 				# Score this position
 				var score = _score_position_for_weapon(weapon_data, position)
 				candidate_positions.append({"position": position, "score": score})
@@ -330,7 +393,8 @@ func _find_own_base_positions():
 # Place a weapon at the specified position
 func _place_weapon(weapon_data, position):
 	if position:
-		weapon_placement.place_weapon(player_id, weapon_data, position)
+		# FIX: Correct parameter order (weapon, position, player_id)
+		weapon_placement.place_weapon(weapon_data, position, player_id)
 
 # Find all weapons that can attack
 func _find_attackable_weapons():

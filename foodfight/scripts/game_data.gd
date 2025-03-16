@@ -9,7 +9,6 @@ var grid_size = Vector2i(16, 8)
 var cell_size = 64
 
 # Function to set player names
-func set_player_names(p1_name, p2_name):
+func set_player_names(p1_name):
 	player1_name = p1_name
-	player2_name = p2_name
-	print("Global player names set - Player 1: ", player1_name, ", Player 2: ", player2_name)
+	print("Global player names set - Player 1: ", player1_name)

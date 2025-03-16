@@ -7,11 +7,13 @@ extends Node2D
 @onready var end_targeting_button = $UI/BottomBar/EndTargetingButton
 @onready var phase_label = $UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel
 @onready var turn_label = $UI/TopBar/HBoxContainer/PhaseContainer/TurnLabel
+@onready var player2_label = $UI/TopBar/HBoxContainer/Player2Container/NameLabel
+@onready var ai_thinking_indicator = $UI/AIThinkingIndicator
 
 # References to components - use same property names as game_manager.gd
 @onready var game_board = $GameBoard
 @onready var game_state_machine = $GameStateMachine
-@onready var game_ui_manager = $GameUIManager  # Changed from ui_manager
+@onready var game_ui_manager = $GameUIManager
 @onready var player_manager = $PlayerManager
 @onready var placement_state = $PlacementState
 @onready var targeting_state = $TargetingState
@@ -19,6 +21,14 @@ extends Node2D
 @onready var weapon_types = $WeaponTypes
 @onready var weapon_placement = $WeaponPlacement
 @onready var ai_opponent = $AIOpponent
+
+# UI manager sub-components for direct access if needed
+var base_ui_manager
+var player_ui_manager
+var phase_ui_manager
+var placement_ui_manager
+var targeting_ui_manager
+var ai_ui_manager
 
 # State tracking
 var game_initialized = false
@@ -37,7 +47,7 @@ func _ready():
 	# Store references in GameManager (property names must match)
 	game_manager.game_board = game_board
 	game_manager.game_state_machine = game_state_machine
-	game_manager.game_ui_manager = game_ui_manager  # Changed from ui_manager
+	game_manager.game_ui_manager = game_ui_manager
 	game_manager.player_manager = player_manager
 	game_manager.placement_state = placement_state
 	game_manager.targeting_state = targeting_state
@@ -55,10 +65,18 @@ func _ready():
 		attack_state.get_node("TargetingManager")
 	)
 	
-	# Connect AI signals to UI manager
-	game_ui_manager.connect_ai_signals(ai_opponent)
+	# Let the UI managers initialize first
+	await get_tree().process_frame
 	
-	# Initialize the core game components (update ui_manager to game_ui_manager)
+	# Connect AI signals directly instead of using connect_ai_signals
+	if ai_opponent and game_ui_manager:
+		# Connect thinking signals directly
+		if !ai_opponent.is_connected("thinking_started", Callable(game_ui_manager, "show_ai_thinking")):
+			ai_opponent.connect("thinking_started", Callable(game_ui_manager, "show_ai_thinking"))
+		if !ai_opponent.is_connected("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking")):
+			ai_opponent.connect("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking"))
+			
+	# Initialize the core game components 
 	game_state_machine.initialize(
 		game_board, 
 		weapon_types, 
@@ -73,15 +91,26 @@ func _ready():
 	placement_state.initialize(
 		weapon_types, 
 		weapon_placement,
-		weapon_buttons_container  # Use the buttons container, not game_ui_manager
+		weapon_buttons_container
 	)
 	
-	# Fix: Remove the fourth argument (game_ui_manager) to match the function signature
+	# Fix: Remove the fourth argument to match the function signature
 	targeting_state.initialize(
 		game_board,
 		attack_state.get_node("WeaponManager"),
 		attack_state.get_node("TargetingManager")
 	)
+	
+	# Store UI manager sub-components for direct access if needed
+	# Wait until the game_ui_manager has initialized its sub-components
+	await get_tree().process_frame
+
+	# Show the title screen first before starting the game
+	if $UI/TitleScreen:
+		print("Showing title screen for base placement phase")
+		$UI/TitleScreen.visible = true
+		$UI/TitleScreen.show_title("Base Placement Phase")
+		await $UI/TitleScreen.animation_completed
 	
 	# Start the game
 	game_state_machine.start_game()
@@ -91,13 +120,6 @@ func _ready():
 
 	# Set up UI elements
 	_setup_ui()
-	
-	# Immediately update the player 2 label to show AI
-	var player2_label = $UI/TopBar/HBoxContainer/Player2Container/NameLabel
-	if player2_label:
-		player2_label.text = "AI OPPONENT"
-		player2_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))  # Make it red
-		print("Updated Player 2 label to AI OPPONENT")
 	
 	# Initialize the game through GameManager singleton
 	if GameManager:

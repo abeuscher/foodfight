@@ -1,16 +1,17 @@
 extends Node2D
 
 # Game states
-enum GameState {SETUP, BASE_PLACEMENT, WEAPON_PLACEMENT, TARGETING, ATTACK, RESOLUTION, GAME_OVER}
+enum GameState { 
+	UNINITIALIZED,
+	START_SCREEN,
+	BASE_PLACEMENT,
+	WEAPON_PLACEMENT,
+	TARGETING,
+	ATTACK_RESOLUTION,
+	GAME_OVER
+}
 
-# Signals
-signal state_changed(new_state)
-signal game_over(winning_player)
-
-# Current game state
-var current_state = GameState.SETUP
-
-# References to game components
+# Component references
 var game_board
 var weapon_types
 var weapon_placement
@@ -18,30 +19,25 @@ var targeting_state
 var attack_state
 var ui_manager
 var player_manager
-var ai_opponent
 
-# New component references
-var turn_manager
-var ai_controller
-
-# Track if base placement has been completed
-var base_placement_done = false
-
-# Initialization flag
+# State management
+var current_state = GameState.UNINITIALIZED
 var is_initialized = false
 
-# Pending state change for handling transitions
-var pending_state = null
+# Turn management
+var turn_manager
+var ai_controller
+var single_player_mode = true  # Always true in this version
 
 func _ready():
-	# Create new components
-	turn_manager = load("res://scripts/states/turn_manager.gd").new()
-	ai_controller = load("res://scripts/ai/ai_controller.gd").new()
-	add_child(turn_manager)
-	add_child(ai_controller)
+	# Will be properly initialized from GameManager
+	pass
 
-func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_targeting_state, p_attack_state, p_ui_manager, p_player_manager):
-	# Store references to components
+# Initialize the game state machine with dependencies
+func initialize(p_game_board, p_weapon_types, p_weapon_placement, 
+				p_targeting_state, p_attack_state, p_ui_manager, p_player_manager):
+	
+	# Store component references
 	game_board = p_game_board
 	weapon_types = p_weapon_types
 	weapon_placement = p_weapon_placement
@@ -50,312 +46,213 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_targeting_st
 	ui_manager = p_ui_manager
 	player_manager = p_player_manager
 	
-	# Get AI opponent reference from GameManager
-	if Engine.has_singleton("GameManager"):
-		var game_manager = Engine.get_singleton("GameManager")
-		ai_opponent = game_manager.ai_opponent
+	# Initialize turn management
+	turn_manager = Node.new()
+	turn_manager.name = "TurnManager"
+	add_child(turn_manager)
 	
-	# Initialize new components
-	turn_manager.initialize(player_manager)
+	# Initialize AI controller
+	ai_controller = Node.new()
+	ai_controller.name = "AIController"
+	ai_controller.set_script(load("res://scripts/ai/ai_controller.gd"))
+	add_child(ai_controller)
 	
-	# Connect component signals
-	turn_manager.connect("player_changed", Callable(self, "_on_player_changed"))
-	
-	# Initialize AI controller if AI opponent exists
+	# Initialize AI controller
+	var ai_opponent = get_node("/root/GameManager").ai_opponent if Engine.has_singleton("GameManager") else null
 	if ai_opponent:
-		ai_controller.initialize(ai_opponent, ui_manager, self)
-		ai_controller.connect("ai_action_completed", Callable(self, "_on_ai_action_completed"))
+		ai_controller.initialize(ai_opponent, ui_manager, self, player_manager)
 	
-	# Connect attack state signals
-	attack_state.connect("attack_completed", Callable(self, "_on_attack_completed"))
-	attack_state.connect("ingredients_awarded", Callable(self, "_on_ingredients_awarded"))
-	
-	# Connect UI manager signals for title screen
-	ui_manager.connect("title_screen_completed", Callable(self, "_on_title_screen_completed"))
-	
-	# Reset base placement flag
-	base_placement_done = false
-	
+	# Set initialized flag
 	is_initialized = true
-	return true
+	
+	# Return self for method chaining
+	return self
 
-# Start the game state machine
+# Set single player mode (always true in this version)
+func set_single_player_mode(enabled):
+	single_player_mode = true  # Always true
+
+# Start the game
 func start_game():
-	change_state(GameState.SETUP)
-
-# Change the game state with interstitial screen
-func change_state(new_state):
-	# Skip title screen for the initial SETUP state and transitioning to itself
-	if current_state == new_state or current_state == GameState.SETUP:
-		_apply_state_change(new_state)
+	if !is_initialized:
+		push_error("Game state machine not initialized")
 		return
 	
-	# Store the pending state
-	pending_state = new_state
+	print("Game started, transitioning to base placement")
+	current_state = GameState.BASE_PLACEMENT
 	
-	# Show the title screen for the upcoming phase
-	var phase_name = GameState.keys()[new_state]
-	if phase_name != "RESOLUTION":
-		ui_manager.show_phase_title(phase_name)
+	# IMPORTANT: Initialize weapon placement for base placement
+	weapon_placement.start_base_placement_phase(player_manager.current_player_index)
+	
+	# Update UI for base placement - works with both original and refactored UI
+	ui_manager.update_game_phase("Base Placement Phase")
+	ui_manager.update_current_turn(player_manager.get_current_player_name())
+	ui_manager.update_ui(current_state, player_manager.current_player_index)
+	
+	# Process initial AI turn if needed
+	_process_ai_turn_if_needed()
+
+# Process AI turn if needed
+func _process_ai_turn_if_needed():
+	if player_manager.is_current_player_ai() and ai_controller:
+		print("Processing AI turn for state: " + str(GameState.keys()[current_state]))
+		ai_controller.process_ai_turn_if_needed()
+		return true
+	return false
+
+# Handle base placement completion
+func _on_base_placement_complete(player_index):
+	print("Base placement complete for player: " + str(player_index + 1))
+	
+	# First player completed base placement
+	if player_index == 0:
+		# Switch to player 2
+		player_manager.next_player()
+		ui_manager.update_current_turn(player_manager.get_current_player_name())
+		
+		# Update UI for player 2 (AI) - works with both original and refactored UI
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		
+		# Process AI turn if needed
+		if _process_ai_turn_if_needed():
+			return
 	else:
-		# Skip title screen for RESOLUTION phase
-		_apply_state_change(new_state)
+		# Both players have completed base placement, move to weapon placement
+		current_state = GameState.WEAPON_PLACEMENT
+		print("Transitioning to WEAPON_PLACEMENT state")
+		
+		# Start the weapon placement phase
+		weapon_placement.start_placement_phase(0)  # Start with Player 1
+		
+		ui_manager.update_game_phase("Weapon Placement Phase")
+		
+		# Reset turn to player 1
+		player_manager.reset_current_player()
+		ui_manager.update_current_turn(player_manager.get_current_player_name())
+		
+		# IMPORTANT: Add explicit full UI update for the new state
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		print("UI updated for WEAPON_PLACEMENT state with player", player_manager.current_player_index + 1)
+		
+		# Process AI turn if needed (shouldn't be needed here as we reset to player 1)
+		_process_ai_turn_if_needed()
 
-# Handle title screen animation completion
-func _on_title_screen_completed():
-	if pending_state != null:
-		_apply_state_change(pending_state)
-		pending_state = null
-
-# Actually apply the state change once title screen is complete
-func _apply_state_change(new_state):
-	current_state = new_state
+# Complete the placement phase
+func placement_completed():
+	if current_state != GameState.WEAPON_PLACEMENT:
+		return
 	
-	# Emit signal for state change
-	emit_signal("state_changed", new_state)
+	print("Weapon placement completed for player: " + str(player_manager.current_player))
 	
-	# Perform actions when entering a new state
-	match new_state:
-		GameState.SETUP:
-			# Go to base placement only if not done yet
-			if !base_placement_done:
-				change_state(GameState.BASE_PLACEMENT)
-			else:
-				change_state(GameState.WEAPON_PLACEMENT)
-			
-		GameState.BASE_PLACEMENT:
-			# Check if it's the AI's turn before creating UI elements
-			if ai_controller.is_ai_turn(turn_manager.current_player_index) and ai_opponent:
-				ai_controller.handle_base_placement()
-			else:
-				# Only start regular base placement UI for human player
-				weapon_placement.start_base_placement_phase(turn_manager.current_player_index)
-				update_ui()
-			
-		GameState.WEAPON_PLACEMENT:
-			weapon_placement.start_placement_phase(turn_manager.current_player_index)
-			
-			# If it's the AI's turn, trigger AI weapon placement
-			if ai_controller.is_ai_turn(turn_manager.current_player_index) and ai_opponent:
-				ai_controller.handle_weapon_placement()
-				
-			# Force refresh of the placement state
-			if Engine.has_singleton("GameManager"):
-				var game_manager = Engine.get_singleton("GameManager")
-				if game_manager and game_manager.placement_state:
-					game_manager.placement_state._create_weapon_buttons()
-			
-		GameState.TARGETING:
-			# Reset to player 1 for targeting phase
-			turn_manager.reset_current_player()
+	# First player completed weapon placement
+	if player_manager.current_player == 0:
+		# Switch to player 2 (AI)
+		player_manager.next_player()
+		ui_manager.update_current_turn(player_manager.get_current_player_name())
+		
+		# IMPORTANT: Add explicit UI update for AI player
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		
+		# Process AI turn if needed
+		if _process_ai_turn_if_needed():
+			return
+	else:
+		# Both players have placed weapons, move to targeting phase
+		current_state = GameState.TARGETING
+		ui_manager.update_game_phase("Targeting Phase")
+		
+		# Reset turn to player 1
+		player_manager.reset_current_player()
+		ui_manager.update_current_turn(player_manager.get_current_player_name())
+		
+		# IMPORTANT: Add explicit UI update for the new state
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		
+		# Process AI turn if needed (shouldn't be needed here as we reset to player 1)
+		_process_ai_turn_if_needed()
 
-			GameManager.weapon_manager.collect_weapons()
-				
-			targeting_state.start_targeting_phase(turn_manager.current_player_index)
-			
-			# If it's the AI's turn for targeting, handle that
-			if ai_controller.is_ai_turn(turn_manager.current_player_index) and ai_opponent:
-				var targeting_result = ai_controller.handle_targeting()
-				if targeting_result and "selected_weapons" in targeting_result and "targets" in targeting_result:
-					_on_targeting_completed(1, targeting_result.selected_weapons, targeting_result.targets)
-			
-		GameState.ATTACK:
-			execute_attacks()
-			
-		GameState.RESOLUTION:
-			# Check for game over condition
-			check_game_over()
-			
-		GameState.GAME_OVER:
-			var winner_name = "Player " + str(player_manager.winning_player + 1)
-			emit_signal("game_over", player_manager.winning_player)
+# Complete the targeting phase
+func targeting_completed():
+	if current_state != GameState.TARGETING:
+		return
+		
+	print("Targeting completed for player: " + str(player_manager.current_player))
 	
-	# Update UI for the new state
-	update_ui()
+	# First player completed targeting
+	if player_manager.current_player == 0:
+		# Switch to player 2 (AI)
+		player_manager.next_player()
+		ui_manager.update_current_turn(player_manager.get_current_player_name())
+		
+		# IMPORTANT: Add explicit UI update for AI player
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		
+		# Process AI turn if needed
+		if _process_ai_turn_if_needed():
+			return
+	else:
+		# Both players have finished targeting, move to attack resolution
+		current_state = GameState.ATTACK_RESOLUTION
+		ui_manager.update_game_phase("Attack Resolution Phase")
+		
+		# IMPORTANT: Add explicit UI update for the new state
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		
+		# Start attack resolution
+		attack_state.resolve_attacks()
 
-# Update UI
-func update_ui():
-	ui_manager.update_ui(current_state, turn_manager.current_player_index)
+# Complete attack resolution
+func attack_resolution_completed():
+	print("Attack resolution completed")
+	
+	# Check for game over
+	var winning_player = _check_for_game_over()
+	
+	if winning_player >= 0:
+		# Game over
+		current_state = GameState.GAME_OVER
+		ui_manager.update_game_phase("Game Over")
+		ui_manager.show_game_over(winning_player)
+		
+		# IMPORTANT: Add explicit UI update for game over state
+		ui_manager.update_ui(current_state, winning_player)
+	else:
+		# Start a new round with weapon placement
+		current_state = GameState.WEAPON_PLACEMENT
+		ui_manager.update_game_phase("Weapon Placement Phase")
+		
+		# Reset to player 1
+		player_manager.reset_current_player()
+		ui_manager.update_current_turn(player_manager.get_current_player_name())
+		
+		# IMPORTANT: Add explicit UI update for the new round
+		ui_manager.update_ui(current_state, player_manager.current_player_index)
+		
+		# Process AI turn if needed (shouldn't be needed here as we reset to player 1)
+		_process_ai_turn_if_needed()
 
-# Handle player change event
-func _on_player_changed(new_player_index):
-	update_ui()
-
-# Handle AI action completion
-func _on_ai_action_completed(action_type):
-	match action_type:
-		ai_controller.AIAction.BASE_PLACEMENT:
-			_on_base_placement_complete(1)  # AI is player 2
-		ai_controller.AIAction.WEAPON_PLACEMENT:
-			_on_placement_phase_complete(1)  # AI is player 2
-		ai_controller.AIAction.TARGETING:
-			# Targeting is handled directly when targeting_result is received
-			pass  # Added pass statement to fix syntax error
-
-# Handle weapon placement event
-func _on_weapon_placed(player_id, weapon_data, _position):
-	# Check if player can continue placing weapons
-	if weapon_placement.get_player_resources(player_id) <= 0:
-		_on_placement_phase_complete(player_id)
-
-# Handle resource update
-func _on_resource_updated(player_id, amount):
-	ui_manager.update_resource_display(player_id, amount)
-
-# Handle completion of base placement phase for a player
-func _on_base_placement_complete(player_id):
-	# Check if base placement was actually done through placement
-	var base_placed = false
+# Check for game over condition
+func _check_for_game_over():
+	# Count bases for each player
+	var player1_bases = 0
+	var player2_bases = 0
+	
 	for x in range(game_board.grid_size.x):
 		for y in range(game_board.grid_size.y):
 			var cell = game_board.grid[x][y]
 			if cell.occupied_by and "weapon_data" in cell.occupied_by:
-				var weapon = cell.occupied_by.weapon_data
-				if "type" in weapon and weapon.type == "base" and cell.occupied_by.player_id == player_id:
-					base_placed = true
-					break
+				if cell.occupied_by.weapon_data.type == "base":
+					if cell.occupied_by.player_id == 0:
+						player1_bases += 1
+					else:
+						player2_bases += 1
 	
-	# If player didn't actually place a base, don't proceed
-	if not base_placed:
-		# Restart this player's base placement phase
-		weapon_placement.start_base_placement_phase(player_id)
-		update_ui()
-		return
+	# Check for winner
+	if player1_bases == 0:
+		player_manager.set_winner(1)
+		return 1  # Player 2 (AI) wins
+	elif player2_bases == 0:
+		player_manager.set_winner(0)
+		return 0  # Player 1 wins
 	
-	# If player 1 (index 0) just finished, switch to player 2
-	if player_id == 0:
-		turn_manager.next_player()
-		weapon_placement.start_base_placement_phase(turn_manager.current_player_index)
-		update_ui()
-	# If player 2 (index 1) just finished, move to regular placement phase
-	else:
-		# Mark base placement as completed
-		base_placement_done = true
-		# Start with player 1 for the regular placement phase
-		turn_manager.reset_current_player()
-		change_state(GameState.WEAPON_PLACEMENT)
-
-# Handle completion of placement phase for a player
-func _on_placement_phase_complete(player_id):
-	# If player 1 (index 0) just finished, switch to player 2
-	if player_id == 0:
-		turn_manager.next_player()
-		weapon_placement.start_placement_phase(turn_manager.current_player_index)
-		update_ui()
-	# If player 2 (index 1) just finished, move to targeting phase
-	else:
-		change_state(GameState.TARGETING)
-
-# Complete the placement phase
-func placement_completed():
-	if current_state == GameState.WEAPON_PLACEMENT:
-		weapon_placement.end_placement_phase()
-		_on_placement_phase_complete(turn_manager.current_player_index)
-	elif current_state == GameState.BASE_PLACEMENT:
-		# For base placement, first check if they actually placed a base
-		var base_placed = false
-		for x in range(game_board.grid_size.x):
-			for y in range(game_board.grid_size.y):
-				var cell = game_board.grid[x][y]
-				if cell.occupied_by and "weapon_data" in cell.occupied_by:
-					var weapon = cell.occupied_by.weapon_data
-					if "type" in weapon and weapon.type == "base" and cell.occupied_by.player_id == turn_manager.current_player_index:
-						base_placed = true
-						break
-		
-		if base_placed:
-			weapon_placement.end_placement_phase()
-			_on_base_placement_complete(turn_manager.current_player_index)
-		else:
-			# Force restart of base placement UI
-			if ui_manager:
-				ui_manager.create_base_placement_ui(turn_manager.current_player_index)
-
-# Handle completion of targeting phase
-func _on_targeting_completed(player_id, selected_weapons, targets):
-	# Store the targeting data for later use in attack phase
-	attack_state.queue_attacks(player_id, selected_weapons, targets)
-	
-	# Check if all players have completed targeting
-	if player_id == 0:
-		# Switch to player 2
-		turn_manager.next_player()
-		targeting_state.start_targeting_phase(turn_manager.current_player_index)
-		update_ui()
-		
-		# If player 2 is AI, handle AI targeting
-		if ai_controller.is_ai_turn(turn_manager.current_player_index) and ai_opponent:
-			var targeting_result = ai_controller.handle_targeting()
-			if targeting_result and "selected_weapons" in targeting_result and "targets" in targeting_result:
-				_on_targeting_completed(1, targeting_result.selected_weapons, targeting_result.targets)
-	else:
-		# Both players have completed targeting, move to attack phase
-		change_state(GameState.ATTACK)
-
-# Execute attacks for both players
-func execute_attacks():
-	attack_state.execute_attacks()
-
-# Handle attack phase completion
-func _on_attack_completed():
-	change_state(GameState.RESOLUTION)
-
-# Handle resources or points awarded to a player
-func _on_points_awarded(player_id, points):
-	if points > 0:
-		_on_ingredients_awarded(player_id, points)
-
-func _on_resources_awarded(player_id, resources):
-	# No separate action needed - already handled by ingredients
-	pass
-
-# Handle ingredients awarded to a player
-func _on_ingredients_awarded(player_id, amount):
-	# Award ingredients to the player
-	turn_manager.award_ingredients(player_id, amount)
-	
-	# Update UI with new ingredients
-	update_ui()
-
-# Check for game over condition
-func check_game_over():
-	# Check if either player has won
-	var winner = attack_state.check_game_over()
-	
-	if winner >= 0:
-		# We have a winner!
-		turn_manager.set_winner(winner)
-		change_state(GameState.GAME_OVER)
-	else:
-		# Continue to next round
-		turn_manager.reset_current_player()
-		change_state(GameState.WEAPON_PLACEMENT)
-
-# Handle input for the current state
-func handle_input(event):
-	# Block input during AI turns
-	if ai_controller.is_thinking():
-		return false
-	
-	# Only process input for the human player (player 1)
-	if ai_controller.is_ai_turn(turn_manager.current_player_index):
-		return false
-		
-	# Process input based on current state
-	match current_state:
-		GameState.BASE_PLACEMENT, GameState.WEAPON_PLACEMENT:
-			if weapon_placement:
-				weapon_placement.handle_input(event)
-				return true
-			
-		GameState.TARGETING:
-			if targeting_state:
-				targeting_state.handle_input(event)
-				return true
-	
-	return false
-
-# Override _input to block player input during AI turns
-func _input(event):
-	# Use AI controller to block input if needed
-	ai_controller.block_input_if_needed(event, turn_manager.current_player_index)
+	return -1  # No winner yet

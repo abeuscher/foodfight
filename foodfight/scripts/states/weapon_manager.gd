@@ -10,11 +10,7 @@ var default_health = 10  # Default health for weapons
 
 func initialize(p_game_board):
 	game_board = p_game_board
-	
-	if game_board.has_node("VisualManager"):
-		visual_manager = game_board.get_node("VisualManager")
-	
-	print("Weapon manager initialized")
+	visual_manager = game_board.get_node("VisualManager")
 
 # Collect all weapons placed on the board
 func collect_weapons():
@@ -29,29 +25,14 @@ func collect_weapons():
 				# Only add the root cell of a weapon (to avoid duplicates)
 				if weapon_entry.root_position == cell.position:
 					if "player_id" in weapon_entry:
-							# Get weapon health from weapon data if available
+						# Get weapon health from weapon data if available
 						var health = default_health
 						
 						if "health" in weapon_entry.weapon_data:
 							health = weapon_entry.weapon_data.health
 						else:
-							# Check if the weapon is a base
-							var is_base = false
-							if weapon_entry.weapon_data is Object:
-								# Try to check for a type property or method
-								if weapon_entry.weapon_data.has_method("get_type"):
-									is_base = weapon_entry.weapon_data.get_type() == "base"
-								elif weapon_entry.weapon_data.has_method("get_id"):
-									var id = str(weapon_entry.weapon_data.get_id()).to_lower()
-									is_base = id.contains("base")
-								# Fall back to checking the id property
-								elif "id" in weapon_entry.weapon_data:
-									var id = str(weapon_entry.weapon_data.id).to_lower()
-									is_base = id.contains("base")
-							elif "type" in weapon_entry.weapon_data:
-								is_base = weapon_entry.weapon_data.type == "base"
-							
-							# Bases have much higher health if not defined
+							# Check if the weapon is a base - bases have higher health
+							var is_base = weapon_entry.weapon_data.type == "base"
 							if is_base:
 								health = 100
 						
@@ -64,7 +45,6 @@ func collect_weapons():
 							"player_id": weapon_entry.player_id  # Save player ID for reference
 						})
 	
-	print("Weapons collected - Player 1: ", player_weapons[0].size(), ", Player 2: ", player_weapons[1].size())
 	return player_weapons
 
 # Reset all weapon cooldowns to 0
@@ -80,30 +60,7 @@ func get_player_weapons(player_id, filter_type=null):
 	
 	var filtered_weapons = []
 	for weapon in player_weapons[player_id]:
-		# Determine the weapon type
-		var weapon_type = ""
-		var is_base = false
-		
-		# Check different ways to identify weapon type
-		if weapon.data is Object:
-			if "type" in weapon.data:
-				weapon_type = weapon.data.type
-			elif weapon.data.has_method("get_type"):
-				weapon_type = weapon.data.get_type()
-			
-			# Additional check for base
-			if weapon_type == "":
-				if "id" in weapon.data:
-					is_base = str(weapon.data.id).to_lower().contains("base")
-		elif typeof(weapon.data) == TYPE_DICTIONARY:
-			if "type" in weapon.data:
-				weapon_type = weapon.data.type
-			elif "id" in weapon.data:
-				is_base = str(weapon.data.id).to_lower().contains("base")
-		
-		# If it's a base, override the type
-		if is_base:
-			weapon_type = "base"
+		var weapon_type = weapon.data.type
 		
 		# Add weapon if it matches the filter
 		if filter_type == "offensive":
@@ -138,31 +95,17 @@ func get_weapon_at_position(position, player_id = -1):
 
 # Remove a weapon from the board
 func remove_weapon_from_board(weapon):
-	print("Removing weapon from board: ", weapon.data.name, " at position ", weapon.position)
-	
 	# Find the weapon in the grid and remove it
 	for x in range(game_board.grid_size.x):
 		for y in range(game_board.grid_size.y):
 			var cell = game_board.grid[x][y]
 			if cell.occupied_by and "root_position" in cell.occupied_by and cell.occupied_by.root_position == weapon.position:
 				# Create instance ID to find the health bar
-				var weapon_id
-				
-				# Handle different ways to get the weapon ID
-				if weapon.data is Object:
-					if weapon.data.has_method("get_id"):
-						weapon_id = weapon.data.get_id()
-					elif "id" in weapon.data:
-						weapon_id = weapon.data.id
-				else:
-					# Fallback
-					weapon_id = "unknown"
-					
+				var weapon_id = weapon.data.id
 				var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
 				
-				# Remove health bar first if visual manager is available
-				if visual_manager:
-					visual_manager.remove_health_bar(instance_id)
+				# Remove health bar
+				visual_manager.remove_health_bar(instance_id)
 				
 				# Clear cell
 				cell.occupied_by = null
@@ -177,30 +120,13 @@ func remove_weapon_from_board(weapon):
 				idx += 1
 	
 	# Update visuals
-	if visual_manager:
-		visual_manager.update_weapon_sprites()
+	visual_manager.update_weapon_sprites()
 
 # Update health display for a weapon
 func update_weapon_health_display(weapon):
-	if !visual_manager:
-		print("Warning: No visual manager available to update health display")
-		return
-	
 	# Create instance ID to find the health bar
-	var weapon_id = "unknown"
-	
-	# Handle different ways to get the weapon ID
-	if weapon.data is Object:
-		if weapon.data.has_method("get_id"):
-			weapon_id = weapon.data.get_id()
-		elif "id" in weapon.data:
-			weapon_id = weapon.data.id
-	elif weapon.data is Dictionary and "id" in weapon.data:
-		weapon_id = weapon.data.id
-		
+	var weapon_id = weapon.data.id
 	var instance_id = str(weapon.player_id) + "_" + str(weapon_id) + "_" + str(weapon.position.x) + "_" + str(weapon.position.y)
-	
-	print("WeaponManager: Updating health bar for " + instance_id + " health=" + str(weapon.health))
 	
 	# Update health bar
 	visual_manager.update_health_bar(instance_id, weapon.health)
@@ -212,20 +138,18 @@ func get_defensive_bonus(position, player_id):
 	
 	for weapon in get_player_weapons(player_id):
 		# Skip weapons that aren't defensive
-		var is_defensive = false
-		if "type" in weapon.data and weapon.data.type == "defensive":
-			is_defensive = true
+		if weapon.data.type != "defensive":
+			continue
 		
-		if is_defensive:
-			# Calculate distance to the defensive structure
-			var distance = abs(weapon.position.x - position.x) + abs(weapon.position.y - position.y)
-			if distance <= defense_radius:
-				# Get defense bonus from the defensive structure
-				var defense_value = 1  # Default defense value
-				if "defense_bonus" in weapon.data:
-					defense_value = weapon.data.defense_bonus
-				
-				# More bonus for closer structures
-				bonus += defense_value * (defense_radius - distance + 1) / defense_radius
+		# Calculate distance to the defensive structure
+		var distance = abs(weapon.position.x - position.x) + abs(weapon.position.y - position.y)
+		if distance <= defense_radius:
+			# Get defense bonus from the defensive structure
+			var defense_value = 1  # Default defense value
+			if "defense_bonus" in weapon.data:
+				defense_value = weapon.data.defense_bonus
+			
+			# More bonus for closer structures
+			bonus += defense_value * (defense_radius - distance + 1) / defense_radius
 	
 	return bonus

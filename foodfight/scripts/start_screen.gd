@@ -11,7 +11,6 @@ func _ready():
 	
 	# Connect the text entered signal to handle pressing Enter
 	player1_input.text_submitted.connect(_on_player1_input_submitted)
-	player2_input.text_submitted.connect(_on_player2_input_submitted)
 	
 	# Add a subtle animation for the start button
 	_animate_start_button()
@@ -26,16 +25,13 @@ func _on_player2_input_submitted(_new_text):
 
 func _on_start_button_pressed():
 	var p1_name = player1_input.text.strip_edges()
-	var p2_name = player2_input.text.strip_edges()
 	
 	# Use default names if fields are empty
 	if p1_name.is_empty():
 		p1_name = "Player 1"
-	if p2_name.is_empty():
-		p2_name = "Player 2"
 	
 	# Set player names in the global GameData singleton
-	GameData.set_player_names(p1_name, p2_name)
+	GameData.set_player_names(p1_name)
 	
 	# Change to the main game scene
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
