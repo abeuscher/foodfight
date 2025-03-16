@@ -79,24 +79,44 @@ func perform_weapon_placement():
 	emit_signal("thinking_started")
 	current_state = AIState.THINKING
 	
+	# Simulate thinking with a small timer for better UX
+	var thinking_timer = get_tree().create_timer(1.5)
+	await thinking_timer.timeout
+	
 	# Place weapons immediately - no delay
 	var resources_remaining = weapon_placement.get_player_resources(player_id)
+	print("AI has " + str(resources_remaining) + " resources for weapons")
+	
+	var weapons_placed = 0
 	while resources_remaining > 0:
 		var weapon_choice = _select_weapon_to_place(resources_remaining)
 		if weapon_choice == null:
+			print("AI: No affordable weapons left")
 			break  # No affordable weapons left
 			
 		var position = _determine_weapon_position(weapon_choice)
 		if position == null:
+			print("AI: No valid positions left for " + weapon_choice.name)
 			break  # No valid positions left
 			
+		print("AI placing weapon " + weapon_choice.name + " at position " + str(position))
 		_place_weapon(weapon_choice, position)
+		weapons_placed += 1
 		
 		# Update remaining resources
 		resources_remaining = weapon_placement.get_player_resources(player_id)
+		print("AI resources remaining: " + str(resources_remaining))
+		
+		# Safety check to prevent infinite loops
+		if weapons_placed >= 5:  # Reasonable upper limit
+			print("AI reached maximum weapon placement limit")
+			break
+	
+	print("AI placed " + str(weapons_placed) + " weapons total")
 	
 	# Complete the process
 	current_state = AIState.IDLE
+	print("AI weapon placement complete")
 	emit_signal("thinking_completed")
 	emit_signal("action_taken", "weapon_placement")
 	
@@ -248,11 +268,14 @@ func _select_weapon_to_place(available_resources):
 	var affordable_weapons = []
 	
 	# Filter affordable weapons
+	print("AI selecting weapon to place with " + str(available_resources) + " resources")
 	for weapon in weapon_types.get_weapons_for_player(player_id):
-		if weapon.cost <= available_resources:
+		if weapon.cost <= available_resources and weapon.type != "base":
 			affordable_weapons.append(weapon)
+			print("AI considering weapon: " + weapon.name + " (cost: " + str(weapon.cost) + ")")
 	
 	if affordable_weapons.size() == 0:
+		print("AI: No affordable weapons available")
 		return null
 	
 	# Simple strategy: prioritize offensive weapons

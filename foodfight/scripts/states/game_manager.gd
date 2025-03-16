@@ -159,15 +159,26 @@ func initialize_components():
 	turn_manager = game_state_machine.turn_manager
 	ai_controller = game_state_machine.ai_controller
 	
-	
 	# 11. Connect signals between components
 	connect_component_signals()
 	
 	# 12. Make sure UI is updated correctly for the initial game state
 	if game_ui_manager:
 		print("Ensuring UI is properly set up for initial state: BASE_PLACEMENT")
-		# Use update_ui instead of update_for_state
-		game_ui_manager.update_ui(game_state_machine.GameState.BASE_PLACEMENT, 0)
+		# Check if we need to create a new UI manager
+		if !game_ui_manager.has_method("update_ui"):
+			print("Creating new GameUIManager instance")
+			# Create a new game_ui_manager if needed
+			game_ui_manager = Node.new()
+			game_ui_manager.name = "GameUIManager"
+			game_ui_manager.set_script(load("res://scripts/ui/game_ui_manager.gd"))
+			main_scene.add_child(game_ui_manager)
+			await get_tree().process_frame
+		
+		# Try to update the UI
+		update_ui(game_state_machine.GameState.BASE_PLACEMENT, 0)
+	else:
+		push_error("No GameUIManager available for UI update!")
 	
 	return true
 
@@ -183,33 +194,77 @@ func connect_component_signals():
 	
 	# Connect AI signals
 	if ai_opponent:
+		print("Connecting AI opponent signals to UI")
 		ai_opponent.connect("thinking_started", Callable(game_ui_manager, "show_ai_thinking"))
 		ai_opponent.connect("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking"))
+	
+	# Connect AI controller signals
+	if ai_controller:
+		print("Connecting AI controller signals to UI")
+		ai_controller.connect("ai_action_started", Callable(game_ui_manager, "show_ai_thinking"))
+		ai_controller.connect("ai_action_completed", Callable(game_ui_manager, "hide_ai_thinking"))
+	
+	# Connect turn manager signals if available
+	if turn_manager:
+		turn_manager.connect("player_changed", Callable(game_ui_manager, "update_player_ui"))
 
 # Helper function to connect UI buttons
 func connect_ui_buttons(main_scene):
 	# End placement button
 	var end_placement_button = main_scene.get_node("UI/BottomBar/EndPlacementButton")
-	
-	end_placement_button.pressed.connect(func():
-		if game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT:
-			var current_player = turn_manager.current_player_index
-			game_state_machine._on_base_placement_complete(current_player)
-		elif game_state_machine.current_state == game_state_machine.GameState.WEAPON_PLACEMENT:
-			game_state_machine.placement_completed()
-		else:
-			game_state_machine.placement_completed()
-	)
+	if end_placement_button:
+		end_placement_button.pressed.connect(func():
+			if game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT:
+				var current_player = player_manager.current_player_index
+				game_state_machine._on_base_placement_complete(current_player)
+			elif game_state_machine.current_state == game_state_machine.GameState.WEAPON_PLACEMENT:
+				game_state_machine.placement_completed()
+		)
 	
 	# End targeting button
 	var end_targeting_button = main_scene.get_node("UI/BottomBar/EndTargetingButton")
-	if turn_manager:
-		turn_manager.connect("player_changed", Callable(game_ui_manager, "update_player_ui"))
-	
-	# Connect ai_controller signals
-	if ai_controller:
-		ai_controller.connect("ai_action_started", Callable(game_ui_manager, "show_ai_thinking"))
-						
+	if end_targeting_button:
+		end_targeting_button.pressed.connect(func():
+			if game_state_machine.current_state == game_state_machine.GameState.TARGETING:
+				game_state_machine.targeting_completed()
+		)
+
+# Helper method to safely update UI
+func update_ui(state, player_index):
+	if game_ui_manager and game_ui_manager.has_method("update_ui"):
+		game_ui_manager.update_ui(state, player_index)
+	else:
+		print("WARNING: Cannot update UI - no suitable UI manager found")
+
+# Helper method to update game phase
+func update_game_phase(phase_text):
+	if game_ui_manager and game_ui_manager.has_method("update_game_phase"):
+		game_ui_manager.update_game_phase(phase_text)
+	else:
+		print("WARNING: Cannot update game phase - no suitable UI manager found")
+
 # Start the game
 func start_game():
 	game_state_machine.start_game()
+
+# Accessor methods for getting component references
+func get_weapon_manager():
+	return weapon_manager
+
+func get_targeting_state():
+	return targeting_state
+
+func get_targeting_manager():
+	return targeting_manager
+
+func get_weapon_types():
+	return weapon_types
+
+func get_turn_manager():
+	return turn_manager
+
+func get_ai_controller():
+	return ai_controller
+
+func get_game_state_machine():
+	return game_state_machine

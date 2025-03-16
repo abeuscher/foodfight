@@ -3,6 +3,7 @@ extends Node
 # AI thinking indicator
 var ai_thinking_label = null
 var is_ai_thinking = false
+var blink_timer = null
 
 # Main scene reference
 var main_scene
@@ -55,28 +56,66 @@ func show_ai_thinking():
 	if ai_thinking_label:
 		ai_thinking_label.visible = true
 		is_ai_thinking = true
+		
+		# Make the AI thinking more noticeable with blinking
+		start_blink_animation()
+		
 		# Hide other bottom bar elements while AI is thinking
-		if main_scene:
-			var weapon_buttons_container = main_scene.get_node_or_null("UI/BottomBar/WeaponButtonsContainer")
-			var targeting_buttons_container = main_scene.get_node_or_null("UI/BottomBar/TargetingButtonsContainer")
-			var end_placement_button = main_scene.get_node_or_null("UI/BottomBar/EndPlacementButton")
-			var end_targeting_button = main_scene.get_node_or_null("UI/BottomBar/EndTargetingButton")
-			
-			if weapon_buttons_container:
-				weapon_buttons_container.visible = false
-			if targeting_buttons_container:
-				targeting_buttons_container.visible = false
-			if end_placement_button:
-				end_placement_button.visible = false
-			if end_targeting_button:
-				end_targeting_button.visible = false
+		hide_other_ui_elements(true)
+
+# Start blinking animation
+func start_blink_animation():
+	# Cancel any existing timer
+	if blink_timer:
+		blink_timer.timeout.disconnect(_on_blink_timer_timeout)
+		blink_timer = null
+	
+	# Start new blinking cycle
+	blink_timer = get_tree().create_timer(0.5)
+	blink_timer.timeout.connect(_on_blink_timer_timeout)
+
+# Handle the timer timeout for blinking
+func _on_blink_timer_timeout():
+	if is_ai_thinking and ai_thinking_label and ai_thinking_label.visible:
+		var current_color = ai_thinking_label.get_theme_color("font_color")
+		var new_color = Color(1, 0.2, 0) if current_color.r < 0.5 else Color(1, 0.6, 0)
+		ai_thinking_label.add_theme_color_override("font_color", new_color)
+		
+		# Continue blinking if still thinking
+		if is_ai_thinking:
+			start_blink_animation()
+
+# Hide or show other UI elements
+func hide_other_ui_elements(should_hide):
+	if main_scene:
+		var weapon_buttons_container = main_scene.get_node_or_null("UI/BottomBar/WeaponButtonsContainer")
+		var targeting_buttons_container = main_scene.get_node_or_null("UI/BottomBar/TargetingButtonsContainer")
+		var end_placement_button = main_scene.get_node_or_null("UI/BottomBar/EndPlacementButton")
+		var end_targeting_button = main_scene.get_node_or_null("UI/BottomBar/EndTargetingButton")
+		
+		if weapon_buttons_container:
+			weapon_buttons_container.visible = !should_hide
+		if targeting_buttons_container:
+			targeting_buttons_container.visible = !should_hide
+		if end_placement_button:
+			end_placement_button.visible = !should_hide
+		if end_targeting_button:
+			end_targeting_button.visible = !should_hide
 
 # Hide AI thinking indicator
 func hide_ai_thinking():
 	if ai_thinking_label:
 		ai_thinking_label.visible = false
 		is_ai_thinking = false
-		# The normal UI update will restore appropriate controls
+		
+		# Show other UI elements again
+		hide_other_ui_elements(false)
+		
+		# Stop blinking
+		if blink_timer:
+			if blink_timer.timeout.is_connected(_on_blink_timer_timeout):
+				blink_timer.timeout.disconnect(_on_blink_timer_timeout)
+			blink_timer = null
 
 # Connect signals from AI opponent
 func connect_ai_signals(ai_opponent):
