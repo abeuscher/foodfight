@@ -5,15 +5,19 @@ extends Node
 @onready var weapon_placement
 @onready var weapon_buttons_container
 
+# Add player_manager reference
+var player_manager
+
 # Track if buttons have been created for the current state
 var buttons_created_for_state = false
 # Debug flag - set to false to reduce console spam
 var debug_input = false
 
-func initialize(p_weapon_types, p_weapon_placement, p_weapon_buttons_container):
+func initialize(p_weapon_types, p_weapon_placement, p_weapon_buttons_container, p_player_manager):
 	weapon_types = p_weapon_types
 	weapon_placement = p_weapon_placement
 	weapon_buttons_container = p_weapon_buttons_container
+	player_manager = p_player_manager
 	
 	# Subscribe to state change events
 	var event_bus = get_service("EventBus")
@@ -24,6 +28,12 @@ func initialize(p_weapon_types, p_weapon_placement, p_weapon_buttons_container):
 
 # Create buttons for each weapon type
 func create_weapon_buttons_for_current_state():
+	if !weapon_types or !weapon_buttons_container:
+		weapon_types = get_service("WeaponTypes")
+		weapon_buttons_container = get_service("PlacementUIManager").weapon_buttons_container
+		if !weapon_types or !weapon_buttons_container:
+			return
+
 	# Reset tracking flag at the start
 	buttons_created_for_state = false
 	
@@ -120,10 +130,10 @@ func handle_input(event):
 		
 		if is_base_placement:
 			weapon_placement.attempt_base_placement(event.global_position)
-			return  # Don't forward this click further
+			return # Don't forward this click further
 		elif weapon_placement.selected_weapon:
 			weapon_placement.attempt_weapon_placement(event.global_position)
-			return  # Don't forward this click further
+			return # Don't forward this click further
 	
 	# Only handle mouse motion and other events in weapon_placement
 	if event is InputEventMouseMotion:
@@ -138,14 +148,10 @@ func handle_input(event):
 func on_state_changed(state_data):
 	var new_state = state_data.new_state
 	
-	# Check if this is for weapon placement or base placement state
-	# 2 = BASE_PLACEMENT, 3 = WEAPON_PLACEMENT (hardcoded for safety)
-	if new_state == 2 or new_state == 3:
-		create_weapon_buttons_for_current_state()
-		
-		# Make sure parent container is visible
-		if weapon_buttons_container and weapon_buttons_container.get_parent():
-			weapon_buttons_container.get_parent().visible = true
+	# Directly update UI through GameManager
+	var game_manager = get_service("GameManager")
+	if game_manager:
+		game_manager.update_ui(new_state, player_manager.current_player_index)
 
 # Helper method to get a service
 func get_service(service_name):

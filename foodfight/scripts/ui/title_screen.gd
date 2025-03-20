@@ -39,3 +39,4 @@ func _on_animation_finished(anim_name):
 		# After fade in, wait a moment then fade out
 		await get_tree().create_timer(1.0).timeout
 		hide_title()
+		emit_signal("animation_completed")

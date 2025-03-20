@@ -1,9 +1,5 @@
 extends Node
 
-signal attack_executed(attacking_weapon, target_position, damage)
-signal attack_completed()
-signal ingredients_awarded(player_id, amount)
-
 # References to game components
 var game_board
 var weapon_types
@@ -41,7 +37,9 @@ func execute_queued_attacks(queued_attacks):
 	# No attacks to execute
 	if queued_attacks.size() == 0:
 		print("No attacks in queue, completing attack phase immediately")
-		emit_signal("attack_completed")
+		var phase_manager = get_service("PhaseManager")
+		if phase_manager:
+			phase_manager.attack_resolution_completed()
 		return
 	
 	# Set attack tracking variables
@@ -54,7 +52,7 @@ func execute_queued_attacks(queued_attacks):
 	# Process each attack in the queue with a delay between each
 	for i in range(queued_attacks.size()):
 		var attack = queued_attacks[i]
-		await get_tree().create_timer(0.5).timeout  # Short delay between attacks
+		await get_tree().create_timer(0.5).timeout # Short delay between attacks
 		_execute_single_attack(attack)
 	
 	# Safety timeout in case animations don't complete properly
@@ -109,8 +107,6 @@ func _execute_single_attack(attack):
 	if total_damage > 0:
 		award_points(player_id, total_damage)
 	
-	emit_signal("attack_executed", weapon, target_position, base_damage)
-	
 	# Track attack animation completion
 	attack_animations_completed += 1
 	print("Attack animation completed: " + str(attack_animations_completed) + " of " + str(total_attack_animations))
@@ -125,18 +121,11 @@ func _on_all_attacks_completed():
 		return
 		
 	attack_in_progress = false
-	print("All attack animations completed")
 	
-	# Signal attack phase completion
-	emit_signal("attack_completed")
-	
-	# Notify the game state machine
-	if Engine.has_singleton("GameManager"):
-		var game_manager = Engine.get_singleton("GameManager")
-		var game_state_machine = game_manager.get_service("GameStateMachine")
-		if game_state_machine and game_state_machine.has_method("attack_resolution_completed"):
-			print("Notifying game state machine that attack resolution is complete")
-			game_state_machine.attack_resolution_completed()
+	# Notify PhaseManager directly
+	var phase_manager = get_service("PhaseManager")
+	if phase_manager:
+		phase_manager.attack_resolution_completed()
 
 # Get targets at a specific position
 func _get_targets_at_position(player_id, position):
@@ -208,9 +197,8 @@ func apply_damage(target, damage):
 # Award ingredients to a player based on damage dealt
 func award_points(player_id, damage):
 	var ingredients = max(min_ingredients_per_hit, int(floor(damage * ingredients_per_damage)))
-	emit_signal("ingredients_awarded", player_id, ingredients)
 	
-	# Also emit event through event bus if available
+	# Notify GameManager directly
 	if Engine.has_singleton("GameManager"):
 		var game_manager = Engine.get_singleton("GameManager")
 		game_manager.emit_event(GameEvents.INGREDIENTS_AWARDED, {
@@ -254,8 +242,14 @@ func check_game_over():
 	
 	# Return winning player ID or -1 if no winner yet
 	if !player0_has_bases:
-		return 1  # Player 2 wins
+		return 1 # Player 2 wins
 	elif !player1_has_bases:
-		return 0  # Player 1 wins
+		return 0 # Player 1 wins
 	else:
-		return -1  # No winner yet
+		return -1 # No winner yet
+
+# Helper method to get a service using the service locator pattern
+func get_service(service_name):
+	if Engine.has_singleton("GameManager"):
+		return Engine.get_singleton("GameManager").get_service(service_name)
+	return null

@@ -11,7 +11,7 @@ var debug_event_history = []
 var max_history_size = 50
 
 # Tracking variables for cycle detection
-var _cycle_detection_enabled = false  # Renamed from enable_cycle_detection
+var _cycle_detection_enabled = false # Renamed from enable_cycle_detection
 var _current_event_chain = []
 var _max_chain_length = 10
 
@@ -21,7 +21,7 @@ func emit_event(event_name: String, args = null) -> void:
 		_log_event(event_name, args)
 	
 	# Check for event cycles
-	if _cycle_detection_enabled:  # Updated variable name
+	if _cycle_detection_enabled: # Updated variable name
 		_current_event_chain.append(event_name)
 		if _current_event_chain.size() > _max_chain_length:
 			push_warning("EventBus: Excessive event chain length detected! Chain: " + str(_current_event_chain))
@@ -41,7 +41,7 @@ func emit_event(event_name: String, args = null) -> void:
 			print("EventBus: No listeners for event " + event_name)
 			
 		# Reset event chain after emission completes
-		if _cycle_detection_enabled:  # Updated variable name
+		if _cycle_detection_enabled: # Updated variable name
 			_current_event_chain.pop_back()
 			
 		return
@@ -64,7 +64,7 @@ func emit_event(event_name: String, args = null) -> void:
 		print("EventBus: Event " + event_name + " delivered to " + str(listener_count) + " listeners")
 	
 	# Reset event chain after emission completes
-	if _cycle_detection_enabled:  # Updated variable name
+	if _cycle_detection_enabled: # Updated variable name
 		_current_event_chain.pop_back()
 
 # Subscribe to an event
@@ -185,6 +185,6 @@ func dump_event_listener_graph():
 
 # Enable cycle detection
 func enable_cycle_detection(enable: bool = true):
-	_cycle_detection_enabled = enable  # Updated variable name
+	_cycle_detection_enabled = enable # Updated variable name
 	if debug_mode:
 		print("EventBus: Cycle detection " + ("enabled" if enable else "disabled"))

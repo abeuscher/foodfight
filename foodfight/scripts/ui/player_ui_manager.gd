@@ -64,12 +64,9 @@ func update_player_ui(player_index):
 	_active_method_calls["update_player_ui"] = true
 	
 	if !is_initialized:
-		print("PlayerUIManager: Not initialized, can't update player UI")
 		_active_method_calls["update_player_ui"] = false
 		return
 		
-	print("PlayerUIManager: Updating UI for player " + str(player_index + 1))
-	
 	# Update player name labels
 	if player1_name_label and player2_name_label and player_manager:
 		player1_name_label.text = player_manager.get_player_name(0)
@@ -104,8 +101,6 @@ func update_ingredients_display(player_id, ingredients):
 		_active_method_calls["update_ingredients_display"] = false
 		return
 		
-	print("PlayerUIManager: Updating ingredients for player " + str(player_id + 1) + ": " + str(ingredients))
-	
 	# Update score labels based on player ID
 	if player_id == 0 and player1_score_label:
 		player1_score_label.text = str(ingredients) + " Ingredients"

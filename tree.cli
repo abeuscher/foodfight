@@ -1,0 +1,1 @@
+find . -maxdepth 4 -type d \( -name "node_modules" -o -name ".git" \) -prune -o -print

@@ -73,6 +73,13 @@ func _on_game_initialized():
 	print("Game initialization complete")
 	_setup_ui()
 	
+	# Ensure PlacementState is initialized with weapon buttons container
+	var placement_state = GameManager.get_service("PlacementState")
+	var weapon_buttons_container = $UI/BottomBar/WeaponButtonsContainer
+	if placement_state and weapon_buttons_container:
+		placement_state.weapon_buttons_container = weapon_buttons_container
+		placement_state.create_weapon_buttons_for_current_state()
+	
 	# Let GameManager control the game start sequence
 	if Engine.has_singleton("GameManager"):
 		Engine.get_singleton("GameManager").start_game()

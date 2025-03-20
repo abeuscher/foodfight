@@ -6,12 +6,12 @@ signal all_stages_completed
 signal initialization_failed(stage_name, reason)
 
 enum Stage {
-	CORE_SYSTEMS,     # Game board, player manager
-	WEAPON_SYSTEMS,   # Weapon types, placement
-	STATE_SYSTEMS,    # Placement, targeting, attack states
-	AI_SYSTEMS,       # AI opponent and controllers
-	UI_SYSTEMS,       # UI managers
-	SIGNAL_BINDING    # Connect all signals
+	CORE_SYSTEMS, # Game board, player manager
+	WEAPON_SYSTEMS, # Weapon types, placement
+	STATE_SYSTEMS, # Placement, targeting, attack states
+	AI_SYSTEMS, # AI opponent and controllers
+	UI_SYSTEMS, # UI managers
+	SIGNAL_BINDING # Connect all signals
 }
 
 var current_stage = -1
@@ -73,7 +73,7 @@ func advance_to_next_stage() -> bool:
 
 func check_dependencies(component_name: String) -> Dictionary:
 	if not required_dependencies.has(component_name):
-		return { "success": true, "missing": [] }
+		return {"success": true, "missing": []}
 		
 	var missing = []
 	for dependency in required_dependencies[component_name]:
@@ -144,7 +144,12 @@ func initialize_state_systems() -> bool:
 	
 	var main_scene = _game_manager.get_tree().current_scene
 	var weapon_buttons = main_scene.get_node("UI/BottomBar/WeaponButtonsContainer")
-	placement_state.initialize(_game_manager.weapon_types, _game_manager.weapon_placement, weapon_buttons)
+	placement_state.initialize(
+		_game_manager.weapon_types,
+		_game_manager.weapon_placement,
+		weapon_buttons,
+		_game_manager.player_manager # Added the missing argument
+	)
 	_game_manager.register_service("PlacementState", placement_state)
 	
 	# Initialize targeting state
@@ -179,10 +184,10 @@ func initialize_ai_systems() -> bool:
 			return false
 		
 		ai_opponent.initialize(
-			_game_manager.game_board, 
-			_game_manager.weapon_types, 
-			_game_manager.weapon_placement, 
-			_game_manager.player_manager, 
+			_game_manager.game_board,
+			_game_manager.weapon_types,
+			_game_manager.weapon_placement,
+			_game_manager.player_manager,
 			_game_manager.targeting_manager
 		)
 		ai_opponent.set_difficulty(_game_manager.ai_difficulty)

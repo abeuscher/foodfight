@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/ui/title_screen.gd" id="1_titlescreen"]
 
-[sub_resource type="Animation" id="Animation_fadefade_in"]
+[sub_resource type="Animation" id="Animation_fade_in"]
 resource_name = "fade_in"
 length = 0.5
 tracks/0/type = "value"
@@ -18,7 +18,7 @@ tracks/0/keys = {
 "values": [Color(1, 1, 1, 0), Color(1, 1, 1, 1)]
 }
 
-[sub_resource type="Animation" id="Animation_fadeout"]
+[sub_resource type="Animation" id="Animation_fade_out"]
 resource_name = "fade_out"
 length = 0.5
 tracks/0/type = "value"
@@ -36,8 +36,8 @@ tracks/0/keys = {
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_fadelib"]
 _data = {
-"fade_in": SubResource("Animation_fadefade_in"),
-"fade_out": SubResource("Animation_fadeout")
+"fade_in": SubResource("Animation_fade_in"),
+"fade_out": SubResource("Animation_fade_out")
 }
 
 [node name="TitleScreen" type="Panel"]

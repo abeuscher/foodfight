@@ -45,3 +45,15 @@ func set_winner(player_id):
     if player_manager.has_method("set_winner"):
         player_manager.set_winner(player_id)
     return player_id
+
+# Switch to the next turn
+func next_turn():
+    current_player_index = (current_player_index + 1) % total_players
+    print("TurnManager: Advancing to player " + str(current_player_index + 1))
+    
+    # Notify PhaseManager of the new turn
+    var phase_manager = get_service("PhaseManager")
+    if phase_manager:
+        phase_manager.on_turn_started(current_player_index)
+    # Ensure dictionary elements are properly closed
+    return {"current_player_index": current_player_index} # Correctly closed dictionary
