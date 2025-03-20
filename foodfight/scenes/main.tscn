@@ -7,7 +7,7 @@
 [ext_resource type="Script" uid="uid://ce6uw8tg5uls7" path="res://scripts/weapons/weapon_placement.gd" id="5_t72fw"]
 [ext_resource type="Script" uid="uid://bb46jvhx7kupw" path="res://scripts/states/game_state_machine.gd" id="6_ioxst"]
 [ext_resource type="Script" uid="uid://vreil4ooq44m" path="res://scripts/states/placement_state.gd" id="7_yslxo"]
-[ext_resource type="Script" uid="uid://da5ytrn0co3uj" path="res://scripts/states/game_ui_manager.gd" id="8_krxdl"]
+[ext_resource type="Script" uid="uid://da5ytrn0co3uj" path="res://scripts/ui/base_ui_manager.gd" id="8_krxdl"]
 [ext_resource type="Script" uid="uid://c8f2bfxh70iw8" path="res://scripts/states/player_manager.gd" id="9_vfjed"]
 [ext_resource type="Script" uid="uid://bfcvk50ght2rn" path="res://scripts/states/attack_state.gd" id="10_wmjgs"]
 [ext_resource type="Script" uid="uid://duftxnb3se67y" path="res://scripts/states/weapon_manager.gd" id="11_hxprs"]
@@ -23,7 +23,7 @@ script = ExtResource("1_0aq6d")
 [node name="GameStateMachine" type="Node2D" parent="."]
 script = ExtResource("6_ioxst")
 
-[node name="GameUIManager" type="Node" parent="."]
+[node name="BaseUIManager" type="Node" parent="."]
 script = ExtResource("8_krxdl")
 
 [node name="PlayerManager" type="Node" parent="."]

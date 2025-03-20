@@ -17,14 +17,14 @@ The game now properly:
 - Transitions to weapon placement phase
 
 However, we still have issues to address:
-- The game_ui_manager.gd file is too large and complex
+- The base_ui_manager.gd file is too large and complex
 - The AI weapon placement phase needs implementation
 - The targeting phase doesn't transition properly
 - The complete game loop with AI isn't fully functional yet
 
 ## Tasks for Session 22: UI Manager Refactoring
 
-### 1. Split game_ui_manager.gd into Smaller Components
+### 1. Split base_ui_manager.gd into Smaller Components
 - Identify logical groupings of functionality within the UI manager
 - Create separate component scripts for each group:
   - `base_ui_manager.gd`: Core UI functionality and common utilities

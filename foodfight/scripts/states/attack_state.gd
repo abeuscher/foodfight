@@ -21,6 +21,12 @@ var min_ingredients_per_hit = 1
 # Damage system constants
 var min_damage_percent = 0.25
 
+# Attack system
+var attack_in_progress = false
+var attack_animations_completed = 0
+var total_attack_animations = 0
+var attack_animation_timeout = 5.0 # Seconds to wait before auto-completing
+
 func initialize(p_game_board, p_weapon_types):
 	game_board = p_game_board
 	weapon_types = p_weapon_types
@@ -34,17 +40,29 @@ func initialize(p_game_board, p_weapon_types):
 func execute_queued_attacks(queued_attacks):
 	# No attacks to execute
 	if queued_attacks.size() == 0:
+		print("No attacks in queue, completing attack phase immediately")
 		emit_signal("attack_completed")
 		return
 	
-	# Process each attack in the queue
-	for attack in queued_attacks:
-		_execute_single_attack(attack)
-		# Instead of awaiting, we'll just apply the delay directly
-		# This removes the async operation
+	# Set attack tracking variables
+	attack_in_progress = true
+	attack_animations_completed = 0
+	total_attack_animations = queued_attacks.size()
+	
+	print("Executing " + str(total_attack_animations) + " queued attacks")
+	
+	# Process each attack in the queue with a delay between each
+	for i in range(queued_attacks.size()):
+		var attack = queued_attacks[i]
+		await get_tree().create_timer(0.5).timeout  # Short delay between attacks
 		_execute_single_attack(attack)
 	
-	emit_signal("attack_completed")
+	# Safety timeout in case animations don't complete properly
+	get_tree().create_timer(attack_animation_timeout).timeout.connect(func():
+		if attack_in_progress:
+			print("Attack animations timeout - forcing completion")
+			_on_all_attacks_completed()
+	)
 
 # Execute a single attack
 func _execute_single_attack(attack):
@@ -59,7 +77,21 @@ func _execute_single_attack(attack):
 	
 	var targets_at_cell = _get_targets_at_position(enemy_player_id, target_position)
 	
-	visual_manager.create_attack_animation(weapon.position, target_position, base_damage)
+	print("Creating attack animation from " + str(weapon.position) + " to " + str(target_position))
+	
+	# Create the attack visual
+	if visual_manager and visual_manager.has_method("create_attack_animation"):
+		visual_manager.create_attack_animation(weapon.position, target_position, base_damage)
+	else:
+		# Fallback to weapon_attack if available
+		var weapon_attack = get_node_or_null("../WeaponAttack")
+		if weapon_attack and weapon_attack.has_method("create_attack_animation"):
+			weapon_attack.create_attack_animation(weapon.position, target_position, base_damage)
+		else:
+			print("WARNING: No visual system available for attack animations")
+	
+	# Apply damage after a short delay to let the animation play
+	await get_tree().create_timer(attack_delay).timeout
 	
 	var total_damage = 0
 	
@@ -78,6 +110,33 @@ func _execute_single_attack(attack):
 		award_points(player_id, total_damage)
 	
 	emit_signal("attack_executed", weapon, target_position, base_damage)
+	
+	# Track attack animation completion
+	attack_animations_completed += 1
+	print("Attack animation completed: " + str(attack_animations_completed) + " of " + str(total_attack_animations))
+	
+	# Check if all animations are completed
+	if attack_animations_completed >= total_attack_animations:
+		_on_all_attacks_completed()
+
+# Handle completion of all attack animations
+func _on_all_attacks_completed():
+	if !attack_in_progress:
+		return
+		
+	attack_in_progress = false
+	print("All attack animations completed")
+	
+	# Signal attack phase completion
+	emit_signal("attack_completed")
+	
+	# Notify the game state machine
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		var game_state_machine = game_manager.get_service("GameStateMachine")
+		if game_state_machine and game_state_machine.has_method("attack_resolution_completed"):
+			print("Notifying game state machine that attack resolution is complete")
+			game_state_machine.attack_resolution_completed()
 
 # Get targets at a specific position
 func _get_targets_at_position(player_id, position):
@@ -134,7 +193,11 @@ func apply_damage(target, damage):
 	var actual_damage = original_health - target.health
 	
 	# Show damage numbers and update health bars
-	visual_manager.show_weapon_damage(target, actual_damage)
+	if visual_manager and visual_manager.has_method("show_weapon_damage"):
+		visual_manager.show_weapon_damage(target, actual_damage)
+	
+	# Update weapon health display
+	weapon_manager.update_weapon_health_display(target)
 	
 	# Check if target is destroyed
 	if target.health <= 0:
@@ -146,6 +209,14 @@ func apply_damage(target, damage):
 func award_points(player_id, damage):
 	var ingredients = max(min_ingredients_per_hit, int(floor(damage * ingredients_per_damage)))
 	emit_signal("ingredients_awarded", player_id, ingredients)
+	
+	# Also emit event through event bus if available
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.INGREDIENTS_AWARDED, {
+			"player_id": player_id,
+			"amount": ingredients
+		})
 
 # Attack queuing
 var queued_attacks = []
@@ -161,6 +232,7 @@ func queue_attacks(player_id, weapons, targets):
 
 # Execute all attacks in the queue
 func execute_attacks():
+	print("Executing all queued attacks: " + str(queued_attacks.size()) + " attacks")
 	execute_queued_attacks(queued_attacks)
 	queued_attacks = []
 
@@ -169,14 +241,14 @@ func check_game_over():
 	# Check if all bases of player 0 are destroyed
 	var player0_has_bases = false
 	for weapon in weapon_manager.get_player_weapons(0):
-		if weapon.data.get_type() == "base":
+		if weapon.data.type == "base":
 			player0_has_bases = true
 			break
 	
 	# Check if all bases of player 1 are destroyed
 	var player1_has_bases = false
 	for weapon in weapon_manager.get_player_weapons(1):
-		if weapon.data.get_type() == "base":
+		if weapon.data.type == "base":
 			player1_has_bases = true
 			break
 	

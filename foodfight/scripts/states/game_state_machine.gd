@@ -29,6 +29,9 @@ var turn_manager
 var ai_controller
 var single_player_mode = true  # Always true in this version
 
+# Event bus reference
+var event_bus
+
 func _ready():
 	# Will be properly initialized from GameManager
 	pass
@@ -45,6 +48,11 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement,
 	attack_state = p_attack_state
 	ui_manager = p_ui_manager
 	player_manager = p_player_manager
+	
+	# Get event bus reference
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		event_bus = game_manager.get_service("EventBus")
 	
 	# Initialize turn management
 	turn_manager = Node.new()
@@ -68,20 +76,13 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement,
 	# Return self for method chaining
 	return self
 
-# Safe UI method call - call a method on ui_manager safely
-func _safe_ui_call(method_name: String, args = []):
-	if ui_manager == null:
-		print("WARNING: ui_manager is null when trying to call " + method_name)
-		return
-		
-	if ui_manager.has_method(method_name):
-		match args.size():
-			0: ui_manager.call(method_name)
-			1: ui_manager.call(method_name, args[0])
-			2: ui_manager.call(method_name, args[0], args[1])
-			_: print("WARNING: Unsupported number of arguments for " + method_name)
+# Emit an event through the event bus
+func emit_event(event_name, event_data = null):
+	if event_bus:
+		print("GameStateMachine: Emitting event: " + event_name)
+		event_bus.emit_event(event_name, event_data)
 	else:
-		print("WARNING: ui_manager does not have method " + method_name)
+		print("WARNING: No event bus available to emit event " + event_name)
 
 # Set single player mode (always true in this version)
 func set_single_player_mode(enabled):
@@ -99,10 +100,22 @@ func start_game():
 	# IMPORTANT: Initialize weapon placement for base placement
 	weapon_placement.start_base_placement_phase(player_manager.current_player_index)
 	
-	# Update UI for base placement - works with both original and refactored UI
-	_safe_ui_call("update_game_phase", ["Base Placement Phase"])
-	_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
-	_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+	# Emit events for phase and player updates
+	emit_event(GameEvents.PHASE_CHANGED, {
+		"phase_text": "Base Placement Phase",
+		"state": current_state
+	})
+	
+	emit_event(GameEvents.PLAYER_CHANGED, {
+		"player_index": player_manager.current_player_index,
+		"player_name": player_manager.get_current_player_name()
+	})
+	
+	emit_event(GameEvents.STATE_CHANGED, {
+		"old_state": GameState.UNINITIALIZED,
+		"new_state": current_state,
+		"player_index": player_manager.current_player_index
+	})
 	
 	# Process initial AI turn if needed
 	_process_ai_turn_if_needed()
@@ -130,13 +143,22 @@ func _on_base_placement_complete(player_index):
 	if player_index == 0:
 		# Switch to player 2
 		player_manager.next_player()
-		_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
 		
-		# Update UI for player 2 (AI) - works with both original and refactored UI
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		# Emit events for player change
+		emit_event(GameEvents.PLAYER_CHANGED, {
+			"player_index": player_manager.current_player_index,
+			"player_name": player_manager.get_current_player_name()
+		})
+		
+		emit_event(GameEvents.STATE_CHANGED, {
+			"old_state": current_state,
+			"new_state": current_state, # Same state, different player
+			"player_index": player_manager.current_player_index
+		})
+		
 		print("Player switched to AI for base placement")
 		
-		 # Extra debug info for AI turn
+		# Extra debug info for AI turn
 		print("Current player after switch:", player_manager.current_player_index)
 		print("Is current player AI:", player_manager.is_current_player_ai())
 		
@@ -156,20 +178,60 @@ func _on_base_placement_complete(player_index):
 			return
 	else:
 		# Both players have completed base placement, move to weapon placement
-		print("Both players completed base placement, transitioning to WEAPON_PLACEMENT")
-		current_state = GameState.WEAPON_PLACEMENT
+		print("====== CRITICAL DEBUG: Transitioning to WEAPON_PLACEMENT ======")
 		
-		# Start the weapon placement phase
+		# Start the weapon placement phase - IMPORTANT: Call this first
 		weapon_placement.start_placement_phase(0)  # Start with Player 1
 		
-		_safe_ui_call("update_game_phase", ["Weapon Placement Phase"])
+		# Then change the state - this will emit all necessary events
+		_set_state(GameState.WEAPON_PLACEMENT)
+		
+		# Emit explicit phase change event with debug info
+		print("Emitting PHASE_CHANGED event for Weapon Placement Phase")
+		emit_event(GameEvents.PHASE_CHANGED, {
+			"phase_text": "Weapon Placement Phase",
+			"state": current_state
+		})
 		
 		# Reset turn to player 1
 		player_manager.reset_current_player()
-		_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
 		
-		# IMPORTANT: Add explicit full UI update for the new state
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		# Emit explicit player changed event with debug info
+		print("Emitting PLAYER_CHANGED event for player 1")
+		emit_event(GameEvents.PLAYER_CHANGED, {
+			"player_index": player_manager.current_player_index,
+			"player_name": player_manager.get_current_player_name()
+		})
+		
+		# IMPORTANT: Add this direct call to the UI manager to ensure phase UI is updated
+		if Engine.has_singleton("GameManager"):
+			var game_manager = Engine.get_singleton("GameManager")
+			
+			print("====== CRITICAL DEBUG: Available services ======")
+			for service_name in game_manager.services.keys():
+				print("  - " + service_name + " is registered")
+			
+			print("====== CRITICAL DEBUG: Accessing PhaseUIManager service ======")
+			var phase_ui_manager = game_manager.get_service("PhaseUIManager")
+			print("  - PhaseUIManager found: " + str(phase_ui_manager != null))
+			
+			if phase_ui_manager:
+				print("  - Has update_phase_ui method: " + str(phase_ui_manager.has_method("update_phase_ui")))
+				print("  - Class type: " + str(phase_ui_manager.get_class()))
+				var actual_script = phase_ui_manager.get_script()
+				print("  - Script type: " + str(actual_script.get_path() if actual_script else "NONE"))
+				
+				if phase_ui_manager.has_method("update_phase_ui"):
+					print("  - Calling update_phase_ui")
+					phase_ui_manager.update_phase_ui(current_state, player_manager.current_player_index)
+				else:
+					print("  - ERROR: PhaseUIManager doesn't have update_phase_ui method!")
+					# Check if it's actually a NullService
+					if phase_ui_manager is NullService:
+						print("  - CRITICAL ERROR: PhaseUIManager is a NullService!")
+			else:
+				print("  - ERROR: Could not find PhaseUIManager service!")
+
 		print("UI updated for WEAPON_PLACEMENT state with player", player_manager.current_player_index + 1)
 
 # Fallback function to force AI base placement if needed
@@ -216,7 +278,7 @@ func check_ai_fallback_needed():
 				return true
 				
 			GameState.TARGETING:
-				# If AI is stuck in targeting, force completion
+				# If AI is stuck in targeting, using fallback
 				print("AI appears stuck in targeting, using fallback")
 				targeting_completed()
 				return true
@@ -241,11 +303,20 @@ func placement_completed():
 	if player_manager.current_player == 0:
 		# Switch to player 2 (AI)
 		player_manager.next_player()
-		_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
-		print("Switched to AI player for weapon placement")
 		
-		# IMPORTANT: Add explicit UI update for AI player
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		# Emit player changed event
+		emit_event(GameEvents.PLAYER_CHANGED, {
+			"player_index": player_manager.current_player_index,
+			"player_name": player_manager.get_current_player_name()
+		})
+		
+		emit_event(GameEvents.STATE_CHANGED, {
+			"old_state": current_state,
+			"new_state": current_state, # Same state, different player
+			"player_index": player_manager.current_player_index
+		})
+		
+		print("Switched to AI player for weapon placement")
 		
 		# Process AI turn if needed
 		var ai_processed = _process_ai_turn_if_needed()
@@ -261,15 +332,20 @@ func placement_completed():
 		return
 	else:
 		# Both players have placed weapons, move to targeting phase
-		current_state = GameState.TARGETING
-		_safe_ui_call("update_game_phase", ["Targeting Phase"])
+		_set_state(GameState.TARGETING)
+		
+		emit_event(GameEvents.PHASE_CHANGED, {
+			"phase_text": "Targeting Phase",
+			"state": current_state
+		})
 		
 		# Reset turn to player 1
 		player_manager.reset_current_player()
-		_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
 		
-		# IMPORTANT: Add explicit UI update for the new state
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		emit_event(GameEvents.PLAYER_CHANGED, {
+			"player_index": player_manager.current_player_index,
+			"player_name": player_manager.get_current_player_name()
+		})
 		
 		# Process AI turn if needed (shouldn't be needed here as we reset to player 1)
 		_process_ai_turn_if_needed()
@@ -285,24 +361,32 @@ func targeting_completed():
 	if player_manager.current_player == 0:
 		# Switch to player 2 (AI)
 		player_manager.next_player()
-		_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
 		
-		# IMPORTANT: Add explicit UI update for AI player
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		emit_event(GameEvents.PLAYER_CHANGED, {
+			"player_index": player_manager.current_player_index,
+			"player_name": player_manager.get_current_player_name()
+		})
+		
+		emit_event(GameEvents.STATE_CHANGED, {
+			"old_state": current_state,
+			"new_state": current_state, # Same state, different player
+			"player_index": player_manager.current_player_index
+		})
 		
 		# Process AI turn if needed
 		if _process_ai_turn_if_needed():
 			return
 	else:
 		# Both players have finished targeting, move to attack resolution
-		current_state = GameState.ATTACK_RESOLUTION
-		_safe_ui_call("update_game_phase", ["Attack Resolution Phase"])
+		_set_state(GameState.ATTACK_RESOLUTION)
 		
-		# IMPORTANT: Add explicit UI update for the new state
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		emit_event(GameEvents.PHASE_CHANGED, {
+			"phase_text": "Attack Resolution Phase",
+			"state": current_state
+		})
 		
 		# Start attack resolution
-		attack_state.resolve_attacks()
+		attack_state.execute_attacks()
 
 # Complete attack resolution
 func attack_resolution_completed():
@@ -313,23 +397,32 @@ func attack_resolution_completed():
 	
 	if winning_player >= 0:
 		# Game over
-		current_state = GameState.GAME_OVER
-		_safe_ui_call("update_game_phase", ["Game Over"])
-		_safe_ui_call("show_game_over", [winning_player])
+		_set_state(GameState.GAME_OVER)
 		
-		# IMPORTANT: Add explicit UI update for game over state
-		_safe_ui_call("update_ui", [current_state, winning_player])
+		emit_event(GameEvents.PHASE_CHANGED, {
+			"phase_text": "Game Over",
+			"state": current_state
+		})
+		
+		emit_event(GameEvents.GAME_OVER, {
+			"winning_player": winning_player
+		})
 	else:
 		# Start a new round with weapon placement
-		current_state = GameState.WEAPON_PLACEMENT
-		_safe_ui_call("update_game_phase", ["Weapon Placement Phase"])
+		_set_state(GameState.WEAPON_PLACEMENT)
+		
+		emit_event(GameEvents.PHASE_CHANGED, {
+			"phase_text": "Weapon Placement Phase",
+			"state": current_state
+		})
 		
 		# Reset to player 1
 		player_manager.reset_current_player()
-		_safe_ui_call("update_current_turn", [player_manager.get_current_player_name()])
 		
-		# IMPORTANT: Add explicit UI update for the new round
-		_safe_ui_call("update_ui", [current_state, player_manager.current_player_index])
+		emit_event(GameEvents.PLAYER_CHANGED, {
+			"player_index": player_manager.current_player_index,
+			"player_name": player_manager.get_current_player_name()
+		})
 		
 		# Process AI turn if needed (shouldn't be needed here as we reset to player 1)
 		_process_ai_turn_if_needed()
@@ -359,3 +452,68 @@ func _check_for_game_over():
 		return 0  # Player 1 wins
 	
 	return -1  # No winner yet
+
+# Modified _set_state function to emit an event
+func _set_state(new_state):
+	var old_state = current_state
+	current_state = new_state
+	
+	print("GameStateMachine: State changed from " + str(GameState.keys()[old_state]) + " to " + str(GameState.keys()[new_state]))
+	
+	# Emit event for state change
+	emit_event(GameEvents.STATE_CHANGED, {
+		"old_state": old_state,
+		"new_state": new_state,
+		"player_index": player_manager.current_player_index
+	})
+	
+	# Emergency direct notification to UI manager to update
+	_ensure_ui_manager_updated(new_state)
+
+# New helper function to ensure UI is updated after state changes
+func _ensure_ui_manager_updated(state):
+	print("====== CRITICAL DEBUG: Ensuring UI manager is updated ======")
+	
+	# Try multiple approaches to find and use the UI manager
+	var ui_manager = null
+	
+	# Try to get UI manager directly from game manager and update it
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		
+		print("DEBUG: Trying to find BaseUIManager service...")
+		# Approach 1: Get service by name
+		ui_manager = game_manager.get_service("BaseUIManager")
+		print("DEBUG: BaseUIManager from get_service: " + ("found" if ui_manager else "not found"))
+		
+		# Approach 2: Try direct property access
+		if !ui_manager and "base_ui_manager" in game_manager:
+			ui_manager = game_manager.base_ui_manager
+			print("DEBUG: BaseUIManager from direct property: " + ("found" if ui_manager else "not found"))
+		
+		# Try to use the UI manager we found
+		if ui_manager:
+			print("DEBUG: BaseUIManager class: " + str(ui_manager.get_class()))
+			print("DEBUG: BaseUIManager has update_ui method: " + str(ui_manager.has_method("update_ui")))
+			
+			if ui_manager.has_method("update_ui"):
+				print("GameStateMachine: Direct UI update via BaseUIManager")
+				ui_manager.call("update_ui", state, player_manager.current_player_index)
+			else:
+				# Try to find the method another way - maybe it's stored in a variable?
+				var methods = []
+				for method in ui_manager.get_method_list():
+					methods.append(method["name"])
+				print("DEBUG: Available methods: " + str(methods))
+				print("WARNING: BaseUIManager found but doesn't have update_ui method")
+		else:
+			print("WARNING: Could not find BaseUIManager service")
+			
+		# FALLBACK: Try direct access to UI elements through scene tree
+		var main_scene = get_tree().current_scene
+		if main_scene:
+			# Try to access phase UI directly
+			var phase_ui = game_manager.get_service("PhaseUIManager")
+			if phase_ui and phase_ui.has_method("update_phase_ui"):
+				print("DEBUG: Using PhaseUIManager directly as fallback")
+				phase_ui.update_phase_ui(state, player_manager.current_player_index)

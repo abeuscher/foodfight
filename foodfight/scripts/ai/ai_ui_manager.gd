@@ -1,4 +1,4 @@
-extends Node
+extends BaseUIListener
 
 # AI thinking indicator
 var ai_thinking_label = null
@@ -21,6 +21,20 @@ func initialize(p_main_scene):
 	is_initialized = true
 	print("AI UI Manager initialized")
 	return self
+
+# Event handlers
+func on_ai_thinking_started(_event_data = null):
+	show_ai_thinking()
+	
+func on_ai_thinking_completed(_event_data = null):
+	hide_ai_thinking()
+	
+func on_player_changed(event_data):
+	# If it's player 2's turn (AI), show thinking indicator
+	if event_data.player_index == 1:
+		show_ai_thinking()
+	else:
+		hide_ai_thinking()
 
 # Create a thinking indicator for AI turns
 func create_ai_thinking_indicator():
@@ -53,6 +67,9 @@ func create_ai_thinking_indicator():
 # Show AI thinking indicator
 func show_ai_thinking():
 	print("AI UI Manager: Showing AI thinking in bottom bar")
+	if !is_initialized:
+		return
+		
 	if ai_thinking_label:
 		ai_thinking_label.visible = true
 		is_ai_thinking = true
@@ -62,11 +79,14 @@ func show_ai_thinking():
 		
 		# Hide other bottom bar elements while AI is thinking
 		hide_other_ui_elements(true)
+		
+		 # REMOVED: This event emission was causing the recursive loop
+		# emit_event(GameEvents.AI_THINKING_STARTED)
 
 # Start blinking animation
 func start_blink_animation():
 	# Cancel any existing timer
-	if blink_timer:
+	if blink_timer and blink_timer.timeout.is_connected(_on_blink_timer_timeout):
 		blink_timer.timeout.disconnect(_on_blink_timer_timeout)
 		blink_timer = null
 	
@@ -87,23 +107,29 @@ func _on_blink_timer_timeout():
 
 # Hide or show other UI elements
 func hide_other_ui_elements(should_hide):
-	if main_scene:
-		var weapon_buttons_container = main_scene.get_node_or_null("UI/BottomBar/WeaponButtonsContainer")
-		var targeting_buttons_container = main_scene.get_node_or_null("UI/BottomBar/TargetingButtonsContainer")
-		var end_placement_button = main_scene.get_node_or_null("UI/BottomBar/EndPlacementButton")
-		var end_targeting_button = main_scene.get_node_or_null("UI/BottomBar/EndTargetingButton")
+	if !main_scene:
+		return
 		
-		if weapon_buttons_container:
-			weapon_buttons_container.visible = !should_hide
-		if targeting_buttons_container:
-			targeting_buttons_container.visible = !should_hide
-		if end_placement_button:
-			end_placement_button.visible = !should_hide
-		if end_targeting_button:
-			end_targeting_button.visible = !should_hide
+	var weapon_buttons_container = main_scene.get_node_or_null("UI/BottomBar/WeaponButtonsContainer")
+	var targeting_buttons_container = main_scene.get_node_or_null("UI/BottomBar/TargetingButtonsContainer")
+	var end_placement_button = main_scene.get_node_or_null("UI/BottomBar/EndPlacementButton")
+	var end_targeting_button = main_scene.get_node_or_null("UI/BottomBar/EndTargetingButton")
+	
+	if weapon_buttons_container:
+		weapon_buttons_container.visible = !should_hide
+	if targeting_buttons_container:
+		targeting_buttons_container.visible = !should_hide
+	if end_placement_button:
+		end_placement_button.visible = !should_hide
+	if end_targeting_button:
+		end_targeting_button.visible = !should_hide
 
 # Hide AI thinking indicator
 func hide_ai_thinking():
+	print("Here is the AI Thinking Firing Here")
+	if !is_initialized:
+		return
+		
 	if ai_thinking_label:
 		ai_thinking_label.visible = false
 		is_ai_thinking = false
@@ -112,14 +138,20 @@ func hide_ai_thinking():
 		hide_other_ui_elements(false)
 		
 		# Stop blinking
-		if blink_timer:
-			if blink_timer.timeout.is_connected(_on_blink_timer_timeout):
-				blink_timer.timeout.disconnect(_on_blink_timer_timeout)
+		if blink_timer and blink_timer.timeout.is_connected(_on_blink_timer_timeout):
+			blink_timer.timeout.disconnect(_on_blink_timer_timeout)
 			blink_timer = null
+		
+		 # REMOVED: This event emission was causing the recursive loop
+		# emit_event(GameEvents.AI_THINKING_COMPLETED)
 
-# Connect signals from AI opponent
+# Connect signals from AI opponent - legacy method preserved for backward compatibility
 func connect_ai_signals(ai_opponent):
+	if !is_initialized:
+		return
+		
 	if ai_opponent:
+		# First disconnect any existing connections to avoid duplicates
 		if ai_opponent.is_connected("thinking_started", Callable(self, "show_ai_thinking")):
 			ai_opponent.disconnect("thinking_started", Callable(self, "show_ai_thinking"))
 		if ai_opponent.is_connected("thinking_completed", Callable(self, "hide_ai_thinking")):

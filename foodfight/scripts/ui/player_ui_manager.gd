@@ -1,129 +1,123 @@
-extends Node
+extends BaseUIListener
 
 # Player UI elements
 var player1_name_label
 var player2_name_label
-var player1_ingredients_label
-var player2_ingredients_label
+var player1_score_label
+var player2_score_label
 
 # Dependencies
 var player_manager
 
-# Ingredients animation properties
-var player1_ingredients_tween
-var player2_ingredients_tween
-var last_player1_ingredients = 0
-var last_player2_ingredients = 0
-
 # Initialization flag
 var is_initialized = false
 
+# Recursion guards
+var _active_method_calls = {}
+
 # Initialize with UI elements
-func initialize(p_player1_name_label, p_player2_name_label, 
-               p_player1_ingredients_label, p_player2_ingredients_label,
-               p_player_manager):
-               
-	player1_name_label = p_player1_name_label
-	player2_name_label = p_player2_name_label
-	player1_ingredients_label = p_player1_ingredients_label
-	player2_ingredients_label = p_player2_ingredients_label
+func initialize(p1_name, p2_name, p1_score, p2_score, p_player_manager):
+	player1_name_label = p1_name
+	player2_name_label = p2_name
+	player1_score_label = p1_score
+	player2_score_label = p2_score
 	player_manager = p_player_manager
-	
-	if player_manager:
-		last_player1_ingredients = player_manager.player1_ingredients
-		last_player2_ingredients = player_manager.player2_ingredients
-	
-	# Update ingredient labels to show "Ingredients" instead of "Score"
-	if player1_ingredients_label:
-		player1_ingredients_label.text = "Ingredients: 0"
-	
-	if player2_ingredients_label:
-		player2_ingredients_label.text = "Ingredients: 0"
-	
-	# Update Player 2 as AI
-	update_player2_as_ai()
 	
 	is_initialized = true
 	print("Player UI Manager initialized")
+	
+	# Initialize labels with starting values
+	if is_initialized:
+		update_player_ui(0) # Default to player 1
+	
 	return self
 
-# Update player UI for current player
-func update_player_ui(current_player_index):
+# Check for recursive calls
+func _check_recursion(method_name: String) -> bool:
+	if _active_method_calls.has(method_name) and _active_method_calls[method_name]:
+		push_warning("PlayerUIManager: Breaking recursive call to " + method_name)
+		return true
+	return false
+
+# Event handlers
+func on_player_changed(event_data):
+	if _check_recursion("on_player_changed"):
+		return
+		
+	_active_method_calls["on_player_changed"] = true
+	update_player_ui(event_data.player_index)
+	_active_method_calls["on_player_changed"] = false
+
+func on_ingredients_updated(event_data):
+	if _check_recursion("on_ingredients_updated"):
+		return
+		
+	_active_method_calls["on_ingredients_updated"] = true
+	update_ingredients_display(event_data.player_id, event_data.ingredients)
+	_active_method_calls["on_ingredients_updated"] = false
+
+# Update player UI elements
+func update_player_ui(player_index):
+	if _check_recursion("update_player_ui"):
+		return
+		
+	_active_method_calls["update_player_ui"] = true
+	
 	if !is_initialized:
+		print("PlayerUIManager: Not initialized, can't update player UI")
+		_active_method_calls["update_player_ui"] = false
 		return
 		
-	# Update player name labels with visual emphasis for current player
-	if player1_name_label and player2_name_label:
-		if current_player_index == 0:  # Player 1
-			player1_name_label.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
-			player2_name_label.remove_theme_color_override("font_color")
-		else:  # Player 2 (AI)
-			player2_name_label.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
-			player1_name_label.remove_theme_color_override("font_color")
-
-# Update ingredients display with animation
-func update_ingredients_display():
-	if !is_initialized or !player1_ingredients_label or !player2_ingredients_label or !player_manager:
-		return
+	print("PlayerUIManager: Updating UI for player " + str(player_index + 1))
+	
+	# Update player name labels
+	if player1_name_label and player2_name_label and player_manager:
+		player1_name_label.text = player_manager.get_player_name(0)
+		player2_name_label.text = player_manager.get_player_name(1)
 		
-	# Only animate if the ingredients have changed
-	if player_manager.player1_ingredients != last_player1_ingredients:
-		animate_ingredients_change(player1_ingredients_label, last_player1_ingredients, player_manager.player1_ingredients)
-		last_player1_ingredients = player_manager.player1_ingredients
-	
-	if player_manager.player2_ingredients != last_player2_ingredients:
-		animate_ingredients_change(player2_ingredients_label, last_player2_ingredients, player_manager.player2_ingredients)
-		last_player2_ingredients = player_manager.player2_ingredients
-
-# Animate ingredients change with a tween
-func animate_ingredients_change(label, from_value, to_value):
-	# Cancel any existing tween
-	if label.has_meta("active_tween") and is_instance_valid(label.get_meta("active_tween")):
-		label.get_meta("active_tween").kill()
-	
-	# Create new tween
-	var tween = create_tween()
-	label.set_meta("active_tween", tween)
-	
-	# Store current ingredients for interpolation
-	var current_value = from_value
-	
-	# Highlight label
-	var original_color = label.get_theme_color("font_color")
-	label.add_theme_color_override("font_color", Color(1, 0.8, 0.2))  # Gold color for highlight
-	
-	# Animate the ingredients value over 0.5 seconds
-	tween.tween_method(func(value):
-		current_value = value
-		label.text = "Ingredients: " + str(int(value))
-	, float(from_value), float(to_value), 0.5)
-	
-	# Return to normal color after animation
-	tween.tween_callback(func():
-		label.remove_theme_color_override("font_color")
-	)
-
-# Update resource display - legacy method now updates ingredients
-func update_resource_display(player_id, amount):
-	if !is_initialized or !player_manager:
-		return
-	
-	# Get the correct ingredients label for the player
-	var ingredients_label = player1_ingredients_label if player_id == 0 else player2_ingredients_label
-	
-	# Update the label if we're displaying for the current player
-	if ingredients_label:
-		# Update directly without animation for immediate feedback
-		ingredients_label.text = "Ingredients: " + str(amount)
+		# Highlight the current player
+		var inactive_color = Color(0.7, 0.7, 0.7)
+		var active_color = Color(1.0, 1.0, 0.0)
 		
-		# Also update our cached value
-		if player_id == 0:
-			last_player1_ingredients = amount
+		if player_index == 0:
+			player1_name_label.add_theme_color_override("font_color", active_color)
+			player2_name_label.add_theme_color_override("font_color", inactive_color)
 		else:
-			last_player2_ingredients = amount
+			player1_name_label.add_theme_color_override("font_color", inactive_color)
+			player2_name_label.add_theme_color_override("font_color", active_color)
+	
+	# Update ingredients display for both players
+	if player_manager:
+		update_ingredients_display(0, player_manager.get_player_ingredients(0))
+		update_ingredients_display(1, player_manager.get_player_ingredients(1))
+	
+	_active_method_calls["update_player_ui"] = false
 
-# Update Player 2 label to show "AI Opponent"
-func update_player2_as_ai():
-	if player2_name_label:
-		player2_name_label.text = "AI OPPONENT"
-		player2_name_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+# Update ingredients display for a specific player
+func update_ingredients_display(player_id, ingredients):
+	if _check_recursion("update_ingredients_display"):
+		return
+		
+	_active_method_calls["update_ingredients_display"] = true
+	
+	if !is_initialized:
+		_active_method_calls["update_ingredients_display"] = false
+		return
+		
+	print("PlayerUIManager: Updating ingredients for player " + str(player_id + 1) + ": " + str(ingredients))
+	
+	# Update score labels based on player ID
+	if player_id == 0 and player1_score_label:
+		player1_score_label.text = str(ingredients) + " Ingredients"
+	elif player_id == 1 and player2_score_label:
+		player2_score_label.text = str(ingredients) + " Ingredients"
+	
+	_active_method_calls["update_ingredients_display"] = false
+
+# Explicitly update the ingredient display for both players
+func refresh_ingredients_display():
+	if !player_manager:
+		return
+		
+	update_ingredients_display(0, player_manager.get_player_ingredients(0))
+	update_ingredients_display(1, player_manager.get_player_ingredients(1))

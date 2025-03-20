@@ -40,12 +40,12 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement, p_player_manag
 	# Connect signals directly instead of calling connect_ai_signals
 	if Engine.has_singleton("GameManager"):
 		var game_manager = Engine.get_singleton("GameManager")
-		if game_manager.game_ui_manager:
+		if game_manager.base_ui_manager:
 			# Connect thinking signals directly
-			if !is_connected("thinking_started", Callable(game_manager.game_ui_manager, "show_ai_thinking")):
-				connect("thinking_started", Callable(game_manager.game_ui_manager, "show_ai_thinking"))
-			if !is_connected("thinking_completed", Callable(game_manager.game_ui_manager, "hide_ai_thinking")):
-				connect("thinking_completed", Callable(game_manager.game_ui_manager, "hide_ai_thinking"))
+			if !is_connected("thinking_started", Callable(game_manager.base_ui_manager, "show_ai_thinking")):
+				connect("thinking_started", Callable(game_manager.base_ui_manager, "show_ai_thinking"))
+			if !is_connected("thinking_completed", Callable(game_manager.base_ui_manager, "hide_ai_thinking")):
+				connect("thinking_completed", Callable(game_manager.base_ui_manager, "hide_ai_thinking"))
 	
 	return true
 
@@ -54,10 +54,16 @@ func set_difficulty(new_difficulty):
 	difficulty = new_difficulty
 	print("AI difficulty set to: " + str(Difficulty.keys()[difficulty]))
 
-# Perform base placement
+# Perform base placement - updated to use events
 func perform_base_placement():
 	print("AI perform_base_placement function called")
+	
+	# Emit thinking started event and also keep the signal for backward compatibility
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_THINKING_STARTED)
 	emit_signal("thinking_started")
+	
 	current_state = AIState.THINKING
 	
 	# Place base immediately - no delay
@@ -68,15 +74,27 @@ func perform_base_placement():
 	# Complete the process
 	current_state = AIState.IDLE
 	print("AI base placement complete")
+	
+	# Emit thinking completed event and also keep the signal for backward compatibility
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_THINKING_COMPLETED)
 	emit_signal("thinking_completed")
+	
 	emit_signal("action_taken", "base_placement")
 	
 	return true
 
-# Perform weapon placement
+# Perform weapon placement - updated to use events
 func perform_weapon_placement():
 	print("AI performing weapon placement...")
+	
+	# Emit thinking started event and also keep the signal for backward compatibility
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_THINKING_STARTED)
 	emit_signal("thinking_started")
+	
 	current_state = AIState.THINKING
 	
 	# Simulate thinking with a small timer for better UX
@@ -117,15 +135,31 @@ func perform_weapon_placement():
 	# Complete the process
 	current_state = AIState.IDLE
 	print("AI weapon placement complete")
+	
+	# Emit thinking completed event and also keep the signal for backward compatibility
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_THINKING_COMPLETED)
 	emit_signal("thinking_completed")
+	
+	# Emit AI move executed event
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_MOVE_EXECUTED, {"action_type": "weapon_placement"})
 	emit_signal("action_taken", "weapon_placement")
 	
 	return true
 
-# Perform targeting
+# Perform targeting - updated to use events
 func perform_targeting():
 	print("AI performing targeting...")
+	
+	# Emit thinking started event and also keep the signal for backward compatibility
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_THINKING_STARTED)
 	emit_signal("thinking_started")
+	
 	current_state = AIState.THINKING
 	
 	# Find all player weapons that can attack
@@ -143,7 +177,17 @@ func perform_targeting():
 	
 	# Complete the process
 	current_state = AIState.IDLE
+	
+	# Emit thinking completed event and also keep the signal for backward compatibility
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_THINKING_COMPLETED)
 	emit_signal("thinking_completed")
+	
+	# Emit AI move executed event
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.AI_MOVE_EXECUTED, {"action_type": "targeting"})
 	emit_signal("action_taken", "targeting")
 	
 	# Return the targeting choices

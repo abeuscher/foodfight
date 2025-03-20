@@ -40,8 +40,8 @@ func initialize(p_ai_opponent, p_ui_manager, p_game_state_machine, p_player_mana
 				var GameManager = Engine.get_singleton("GameManager")
 				if "ai_ui_manager" in GameManager:
 					ai_ui_manager = GameManager.ai_ui_manager
-				elif GameManager.game_ui_manager and "ai_ui_manager" in GameManager.game_ui_manager:
-					ai_ui_manager = GameManager.game_ui_manager.ai_ui_manager
+				elif GameManager.base_ui_manager and "ai_ui_manager" in GameManager.base_ui_manager:
+					ai_ui_manager = GameManager.base_ui_manager.ai_ui_manager
 		
 	ai_initialized = true
 	print("AI Controller initialized with all components")

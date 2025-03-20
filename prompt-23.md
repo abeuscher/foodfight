@@ -3,7 +3,7 @@
 ## Progress from Session 22
 In Session 22, we successfully refactored the UI management system to improve code organization and maintainability:
 
-1. Split `game_ui_manager.gd` into six specialized components:
+1. Split `base_ui_manager.gd` into six specialized components:
    - `base_ui_manager.gd`: Core UI coordinator
    - `player_ui_manager.gd`: Player name and ingredients display
    - `phase_ui_manager.gd`: Game phase transitions and labels

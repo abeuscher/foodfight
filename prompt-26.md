@@ -63,7 +63,7 @@ var required_dependencies = {
     "TargetingState": ["GameBoard", "WeaponManager", "TargetingManager"],
     "AttackState": ["GameBoard", "WeaponTypes"],
     "AIOpponent": ["GameBoard", "WeaponTypes", "WeaponPlacement", "PlayerManager", "TargetingManager"],
-    "GameStateMachine": ["GameBoard", "WeaponTypes", "WeaponPlacement", "TargetingState", "AttackState", "GameUIManager", "PlayerManager"]
+    "GameStateMachine": ["GameBoard", "WeaponTypes", "WeaponPlacement", "TargetingState", "AttackState", "BaseUIManager", "PlayerManager"]
 }
 
 var _game_manager = null
@@ -192,10 +192,10 @@ func get_service(service_name: String, create_default: bool = false) -> Object:
     if create_default:
         # Create appropriate default based on service name
         match service_name:
-            "GameUIManager":
+            "BaseUIManager":
                 var new_service = Node.new()
-                new_service.name = "GameUIManager"
-                new_service.set_script(load("res://scripts/ui/game_ui_manager.gd"))
+                new_service.name = "BaseUIManager"
+                new_service.set_script(load("res://scripts/ui/base_ui_manager.gd"))
                 register_service(service_name, new_service)
                 return new_service
             # Add cases for other services as needed

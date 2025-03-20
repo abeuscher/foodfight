@@ -1,5 +1,8 @@
 extends Node
 
+# Remove preload and handle loading at runtime
+# const NullServiceScript = preload("res://scripts/core/null_service.gd")
+
 signal game_initialized
 signal component_initialized(component_name)
 
@@ -12,7 +15,7 @@ var services = {}
 # Core components
 var game_board
 var game_state_machine
-var game_ui_manager
+var base_ui_manager  # Changed from base_ui_manager
 var player_manager
 var placement_state
 var targeting_state
@@ -30,7 +33,6 @@ var turn_manager
 var ai_controller
 
 # UI manager sub-components
-var base_ui_manager
 var player_ui_manager
 var phase_ui_manager
 var placement_ui_manager
@@ -42,12 +44,25 @@ var initialization_complete = false
 var main_scene_path = "res://scenes/main.tscn"
 var is_single_player = true  # Now always true - we're converting to single-player only
 var ai_difficulty = 1  # 0=easy, 1=medium, 2=hard
+var initialization_errors = {}  # Store initialization errors
+
+# Initialization controller
+var initialization_controller = null
+
+# Add event bus
+var event_bus
 
 func _ready():
 	if not Engine.has_singleton("GameManager"):
 		Engine.register_singleton("GameManager", self)
 	
 	get_tree().root.ready.connect(_on_scene_tree_ready)
+	
+	# Create and register event bus - FIX: use load() instead of direct class reference
+	var EventBusScript = load("res://scripts/core/event_bus.gd")
+	event_bus = EventBusScript.new()
+	add_child(event_bus)
+	register_service("EventBus", event_bus)
 
 func _on_scene_tree_ready():
 	current_scene = get_tree().current_scene
@@ -57,21 +72,39 @@ func initialize_game(main_node):
 	# Get references to all components
 	get_component_references(main_node)
 	
-	# Initialize all components in order
-	initialize_components()
+	# Create and start initialization controller
+	initialization_controller = InitializationController.new(self)
+	initialization_controller.stage_completed.connect(_on_initialization_stage_completed)
+	initialization_controller.initialization_failed.connect(_on_initialization_failed)
+	initialization_controller.all_stages_completed.connect(_on_all_stages_completed)
 	
-	# Mark initialization as complete and signal
-	initialization_complete = true
-	emit_signal("game_initialized")
+	var init_success = initialization_controller.start_initialization()
+	if not init_success:
+		push_error("Game initialization failed at setup")
+		return false
 	
 	return true
+
+func _on_initialization_stage_completed(stage_name):
+	print("Initialization stage completed: " + stage_name)
+	emit_signal("component_initialized", stage_name)
+
+func _on_initialization_failed(stage_name, reason):
+	push_error("Initialization failed at stage '" + stage_name + "': " + reason)
+	initialization_errors[stage_name] = reason
+	# Could implement recovery mechanisms here
+
+func _on_all_stages_completed():
+	initialization_complete = true
+	emit_signal("game_initialized")
+	print("All initialization stages completed successfully")
 
 # Get references to all game components
 func get_component_references(main_node):
 	# Get direct component references
 	game_board = main_node.get_node("GameBoard")
 	game_state_machine = main_node.get_node("GameStateMachine")
-	game_ui_manager = main_node.get_node("GameUIManager")
+	base_ui_manager = main_node.get_node("BaseUIManager")  # Changed from BaseUIManager
 	player_manager = main_node.get_node("PlayerManager")
 	placement_state = main_node.get_node("PlacementState")
 	targeting_state = main_node.get_node("TargetingState")
@@ -93,8 +126,37 @@ func get_component_references(main_node):
 
 # Register a service in the service locator
 func register_service(service_name: String, service_instance: Object) -> void:
+	# Don't replace a working service with a NullService
+	if service_instance is NullService and services.has(service_name) and !(services[service_name] is NullService):
+		print("GameManager: Not replacing existing service with NullService: " + service_name)
+		return
+		
+	# Don't replace a service that has the critical methods with one that doesn't
+	if services.has(service_name):
+		var existing_service = services[service_name]
+		
+		# Special handling for PhaseUIManager
+		if service_name == "PhaseUIManager":
+			var existing_has_update = existing_service.has_method("update_phase_ui")
+			var new_has_update = service_instance.has_method("update_phase_ui")
+			
+			# Keep the existing one if it has the method and new one doesn't
+			if existing_has_update and !new_has_update:
+				print("GameManager: Keeping existing PhaseUIManager with update_phase_ui method")
+				return
+		
+		# Similar logic for BaseUIManager
+		if service_name == "BaseUIManager":
+			var existing_has_update = existing_service.has_method("update_ui")
+			var new_has_update = service_instance.has_method("update_ui")
+			
+			if existing_has_update and !new_has_update:
+				print("GameManager: Keeping existing BaseUIManager with update_ui method")
+				return
+	
+	# Register the service
+	print("GameManager: Registering service: " + service_name)
 	services[service_name] = service_instance
-	print("Service registered: " + service_name)
 
 # Get a service from the service locator
 func get_service(service_name: String, create_default: bool = false) -> Object:
@@ -104,134 +166,34 @@ func get_service(service_name: String, create_default: bool = false) -> Object:
 	if create_default:
 		# Create appropriate default based on service name
 		match service_name:
-			"GameUIManager":
+			"BaseUIManager":  # Fixed indentation
 				var new_service = Node.new()
-				new_service.name = "GameUIManager"
-				new_service.set_script(load("res://scripts/ui/game_ui_manager.gd"))
+				new_service.name = "BaseUIManager"
+				new_service.set_script(load("res://scripts/ui/base_ui_manager.gd"))
 				register_service(service_name, new_service)
 				return new_service
+			# Add cases for other services as needed
 	
 	push_warning("Service not found: " + service_name)
-	return null
+	
+	# Load at runtime instead of preload
+	var NullServiceScript = load("res://scripts/core/null_service.gd")
+	if NullServiceScript:
+		return NullServiceScript.new()
+	else:
+		push_warning("Failed to load NullService script")
+		# Return a simple Object as last resort
+		return Object.new()
 
 # Check if a service exists in the service locator
 func has_service(service_name: String) -> bool:
 	return services.has(service_name)
 
-# Initialize all components in the correct order
+# Initialize all components in the correct order - DEPRECATED
+# Now handled by InitializationController
 func initialize_components():
-	# 1. Initialize the game board (no dependencies)
-	game_board.initialize_grid()
-	emit_signal("component_initialized", "GameBoard")
-	register_service("GameBoard", game_board)
-	
-	# 2. Initialize player manager (no dependencies)
-	# Configure player 2 as AI
-	player_manager.set_player_type(1, player_manager.PlayerType.AI)
-	player_manager.set_player_name(1, "AI OPPONENT")
-	emit_signal("component_initialized", "PlayerManager")
-	register_service("PlayerManager", player_manager)
-	
-	# 3. Initialize weapon systems
-	weapon_placement.initialize(game_board, weapon_types)
-	emit_signal("component_initialized", "WeaponPlacement")
-	register_service("WeaponPlacement", weapon_placement)
-	register_service("WeaponTypes", weapon_types)
-	
-	# 4. Initialize weapon manager
-	weapon_manager.initialize(game_board)
-	emit_signal("component_initialized", "WeaponManager")
-	register_service("WeaponManager", weapon_manager)
-	
-	# 5. Initialize targeting manager
-	targeting_manager.initialize(game_board)
-	emit_signal("component_initialized", "TargetingManager")
-	register_service("TargetingManager", targeting_manager)
-	
-	# 6. Initialize placement state
-	var main_scene = get_tree().current_scene
-	var weapon_buttons = main_scene.get_node("UI/BottomBar/WeaponButtonsContainer")
-	
-	placement_state.initialize(weapon_types, weapon_placement, weapon_buttons)
-	emit_signal("component_initialized", "PlacementState")
-	register_service("PlacementState", placement_state)
-	
-	# 7. Initialize targeting state
-	targeting_state.initialize(game_board, weapon_manager, targeting_manager)
-	emit_signal("component_initialized", "TargetingState")
-	register_service("TargetingState", targeting_state)
-	
-	# 8. Initialize attack state
-	attack_state.initialize(game_board, weapon_types)
-	emit_signal("component_initialized", "AttackState")
-	register_service("AttackState", attack_state)
-	
-	# 9. Initialize AI opponent with the appropriate difficulty
-	if ai_opponent:
-		ai_opponent.initialize(
-			game_board, 
-			weapon_types, 
-			weapon_placement, 
-			player_manager, 
-			targeting_manager
-		)
-		ai_opponent.set_difficulty(ai_difficulty)
-		emit_signal("component_initialized", "AIOpponent")
-		register_service("AIOpponent", ai_opponent)
-	
-	# 10. Initialize game state machine (depends on everything)
-	game_state_machine.initialize(
-		game_board,
-		weapon_types,
-		weapon_placement,
-		targeting_state,
-		attack_state,
-		game_ui_manager,
-		player_manager
-	)
-	
-	# Set single player mode in game state machine
-	game_state_machine.set_single_player_mode(true)
-	
-	emit_signal("component_initialized", "GameStateMachine")
-	register_service("GameStateMachine", game_state_machine)
-	
-	# Get references to turn_manager and ai_controller after game_state_machine initialization
-	turn_manager = game_state_machine.turn_manager
-	ai_controller = game_state_machine.ai_controller
-	
-	if turn_manager:
-		register_service("TurnManager", turn_manager)
-	
-	if ai_controller:
-		register_service("AIController", ai_controller)
-		
-	if game_ui_manager:
-		register_service("GameUIManager", game_ui_manager)
-	
-	# 11. Connect signals between components
-	connect_component_signals()
-	
-	# 12. Make sure UI is updated correctly for the initial game state
-	if game_ui_manager:
-		print("Ensuring UI is properly set up for initial state: BASE_PLACEMENT")
-		# Check if we need to create a new UI manager
-		if !game_ui_manager.has_method("update_ui"):
-			print("Creating new GameUIManager instance")
-			# Create a new game_ui_manager if needed
-			game_ui_manager = Node.new()
-			game_ui_manager.name = "GameUIManager"
-			game_ui_manager.set_script(load("res://scripts/ui/game_ui_manager.gd"))
-			main_scene.add_child(game_ui_manager)
-			register_service("GameUIManager", game_ui_manager)
-			await get_tree().process_frame
-		
-		# Try to update the UI
-		update_ui(game_state_machine.GameState.BASE_PLACEMENT, 0)
-	else:
-		push_error("No GameUIManager available for UI update!")
-	
-	return true
+	push_warning("initialize_components is deprecated. Use InitializationController instead.")
+	return false
 
 # Connect signals between components
 func connect_component_signals():
@@ -240,24 +202,33 @@ func connect_component_signals():
 	# Connect UI buttons
 	connect_ui_buttons(main_scene)
 	
-	# Connect targeting state to game_ui_manager
-	targeting_state.connect("player_turn_started", Callable(game_ui_manager, "handle_player_turn_update"))
+	# Connect targeting state to base_ui_manager
+	var targeting_state = get_service("TargetingState")
+	var base_ui_manager = get_service("BaseUIManager")  # Changed from BaseUIManager
+	
+	if targeting_state.has_method("connect") and base_ui_manager.has_method("handle_player_turn_update"):
+		targeting_state.connect("player_turn_started", Callable(base_ui_manager, "handle_player_turn_update"))
 	
 	# Connect AI signals
-	if ai_opponent:
+	var ai_opponent = get_service("AIOpponent")
+	if ai_opponent and ai_opponent.has_method("connect"):
 		print("Connecting AI opponent signals to UI")
-		ai_opponent.connect("thinking_started", Callable(game_ui_manager, "show_ai_thinking"))
-		ai_opponent.connect("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking"))
+		if base_ui_manager.has_method("show_ai_thinking") and base_ui_manager.has_method("hide_ai_thinking"):
+			ai_opponent.connect("thinking_started", Callable(base_ui_manager, "show_ai_thinking"))
+			ai_opponent.connect("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking"))
 	
 	# Connect AI controller signals
-	if ai_controller:
+	var ai_controller = get_service("AIController")
+	if ai_controller and ai_controller.has_method("connect"):
 		print("Connecting AI controller signals to UI")
-		ai_controller.connect("ai_action_started", Callable(game_ui_manager, "show_ai_thinking"))
-		ai_controller.connect("ai_action_completed", Callable(game_ui_manager, "hide_ai_thinking"))
+		if base_ui_manager.has_method("show_ai_thinking") and base_ui_manager.has_method("hide_ai_thinking"):
+			ai_controller.connect("ai_action_started", Callable(base_ui_manager, "show_ai_thinking"))
+			ai_controller.connect("ai_action_completed", Callable(base_ui_manager, "hide_ai_thinking"))
 	
 	# Connect turn manager signals if available
-	if turn_manager:
-		turn_manager.connect("player_changed", Callable(game_ui_manager, "update_player_ui"))
+	var turn_manager = get_service("TurnManager")
+	if turn_manager and turn_manager.has_method("connect") and base_ui_manager.has_method("update_player_ui"):
+		turn_manager.connect("player_changed", Callable(base_ui_manager, "update_player_ui"))
 
 # Helper function to connect UI buttons
 func connect_ui_buttons(main_scene):
@@ -282,25 +253,72 @@ func connect_ui_buttons(main_scene):
 
 # Helper method to safely update UI
 func update_ui(state, player_index):
-	var ui_manager = get_service("GameUIManager")
+	var ui_manager = get_service("BaseUIManager")  # Changed from BaseUIManager
 	if ui_manager and ui_manager.has_method("update_ui"):
 		ui_manager.update_ui(state, player_index)
 	else:
 		print("WARNING: Cannot update UI - no suitable UI manager found")
+	
+	# Also emit as an event
+	emit_event(GameEvents.UI_UPDATE_REQUIRED, {"state": state, "player_index": player_index})
 
 # Helper method to update game phase
 func update_game_phase(phase_text):
-	var ui_manager = get_service("GameUIManager")
+	var ui_manager = get_service("BaseUIManager")  # Changed from BaseUIManager
 	if ui_manager and ui_manager.has_method("update_game_phase"):
 		ui_manager.update_game_phase(phase_text)
 	else:
 		print("WARNING: Cannot update game phase - no suitable UI manager found")
+		
+	# Also emit as an event
+	emit_event(GameEvents.PHASE_CHANGED, {"phase_text": phase_text})
 
 # Start the game
 func start_game():
-	game_state_machine.start_game()
+	var game_state_machine = get_service("GameStateMachine")
+	if game_state_machine and game_state_machine.has_method("start_game"):
+		game_state_machine.start_game()
+	else:
+		push_error("Cannot start game - GameStateMachine not available")
 
-# Accessor methods for getting component references
+# Add new helper methods for component registration and initialization
+func register_component(component_name: String, component: Object) -> bool:
+	if component == null:
+		push_error("Cannot register null component: " + component_name)
+		return false
+		
+	# Check dependencies
+	if initialization_controller:
+		var dependency_check = initialization_controller.check_dependencies(component_name)
+		if not dependency_check.success:
+			push_error("Cannot register " + component_name + " - missing dependencies: " + str(dependency_check.missing))
+			return false
+	
+	# Register the service
+	register_service(component_name, component)
+	return true
+
+func initialize_and_register(component_name: String, component: Object, init_args: Array = []) -> bool:
+	if component == null:
+		push_error("Cannot initialize null component: " + component_name)
+		return false
+	
+	# Call initialize method with args if it exists
+	if component.has_method("initialize"):
+		var result = component.callv("initialize", init_args)
+		if result is bool and result == false:
+			push_error("Failed to initialize component: " + component_name)
+			return false
+	
+	return register_component(component_name, component)
+
+# Add helper method to emit events
+func emit_event(event_name: String, args = null) -> void:
+	var bus = get_service("EventBus")
+	if bus:
+		bus.emit_event(event_name, args)
+
+# Accessor methods for getting component references - now using service locator
 func get_weapon_manager():
 	return get_service("WeaponManager")
 

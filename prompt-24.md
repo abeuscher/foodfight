@@ -6,7 +6,7 @@ We have made significant progress refactoring the UI system for Food Fight, but 
 
 1. **UI Architecture**:
    - We've split the UI into specialized managers: `base_ui_manager`, `player_ui_manager`, `phase_ui_manager`, `placement_ui_manager`, `targeting_ui_manager`, and `ai_ui_manager`
-   - We currently use a "facade" pattern where `game_ui_manager` delegates to these specialized managers
+   - We currently use a "facade" pattern where `base_ui_manager` delegates to these specialized managers
    - This has created some confusion and coupling issues
 
 2. **Game Flow Issues**:

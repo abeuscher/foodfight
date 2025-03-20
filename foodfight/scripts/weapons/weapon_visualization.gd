@@ -9,6 +9,11 @@ var preview_rect = null
 var is_initialized = false
 var default_cell_size = Vector2(32, 32)  # Fallback cell size if game_board is null
 
+# Preview state tracking
+var current_grid_position = null
+var current_valid_state = false
+var preview_creation_count = 0  # Track how many times we're creating previews for debugging
+
 func _ready():
 	# Set up a timer to check periodically if we need to create the preview
 	# This helps with ensuring preview is created even if initialization was incomplete
@@ -77,6 +82,19 @@ func _get_cell_size():
 
 # Update the size of the preview based on weapon data
 func update_preview_size(weapon_data):
+	# Skip excessive recreation if nothing changed
+	if preview_rect and is_instance_valid(preview_rect):
+		var cell_size = _get_cell_size()
+		var expected_size = Vector2(
+			weapon_data.size.x * cell_size.x,
+			weapon_data.size.y * cell_size.y
+		)
+		if preview_rect.size == expected_size:
+			return
+	
+	# Track creation count for debugging
+	preview_creation_count += 1
+	
 	# Extra debug info
 	print("Creating preview for weapon, size:", weapon_data.size)
 	
@@ -123,6 +141,14 @@ func update_preview_size(weapon_data):
 
 # Update the position and color of the preview based on validity
 func update_preview_position(grid_position, is_valid):
+	# Skip update if position and validity haven't changed
+	if current_grid_position == grid_position and current_valid_state == is_valid and preview_rect and is_instance_valid(preview_rect) and preview_rect.visible:
+		return
+	
+	# Update state tracking
+	current_grid_position = grid_position
+	current_valid_state = is_valid
+	
 	if !preview_rect:
 		print("Warning: Trying to update position but no preview exists, creating...")
 		var weapon_placement = get_parent()
@@ -177,6 +203,10 @@ func clear_preview():
 		preview_rect.queue_free()
 		preview_rect = null
 		print("Preview cleared")
+	
+	# Reset position tracking
+	current_grid_position = null
+	current_valid_state = false
 
 # Create a weapon sprite on the board
 func place_weapon_visual(weapon_data, grid_position, player_id):
@@ -188,7 +218,7 @@ func place_weapon_visual(weapon_data, grid_position, player_id):
 	
 # Update placement preview with weapon data and position
 func update_placement_preview(weapon_data, grid_position, is_valid):
-	# Update size first
+	# Update size first (will be skipped if size hasn't changed)
 	update_preview_size(weapon_data)
 	
 	# Then update position and visibility

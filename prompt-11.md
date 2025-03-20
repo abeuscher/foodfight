@@ -63,9 +63,9 @@ The current issue with player 2's targeting turn being skipped has the following
 
 2. The UI elements for player 2's turn appear to be created:
    ```
-   GameUIManager: Player turn started for Player 2
-   GameUIManager: Creating buttons for Player 2
-   GameUIManager: Found 1 weapons for Player 2
+   BaseUIManager: Player turn started for Player 2
+   BaseUIManager: Creating buttons for Player 2
+   BaseUIManager: Found 1 weapons for Player 2
    DEBUG: UI updated for Player 2
    ```
 
@@ -89,7 +89,7 @@ To resolve the remaining issues:
 
 1. Add debug prints to identify exactly when and why player 2's targeting phase is automatically ending
 2. Check for any erroneous signal connections that might be triggering the end targeting button
-3. Review the `targeting_state.gd` and `game_ui_manager.gd` for any conditions that might be auto-ending player 2's turn
+3. Review the `targeting_state.gd` and `base_ui_manager.gd` for any conditions that might be auto-ending player 2's turn
 4. Add proper game state validation before processing the end targeting button press
 
 These steps should help pinpoint and fix the cause of player 2's turn being skipped, allowing the game loop to function properly.

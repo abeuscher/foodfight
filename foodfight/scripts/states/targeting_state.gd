@@ -26,7 +26,7 @@ func initialize(p_game_board, p_weapon_manager, p_targeting_manager):
 	targeting_manager = p_targeting_manager
 	return true
 
-# Start targeting for a player
+# Start targeting for a player - update to use events
 func start_targeting_phase(player_id):
 	current_player_id = player_id
 	is_targeting_active = true
@@ -36,8 +36,14 @@ func start_targeting_phase(player_id):
 	selected_weapons = []
 	targets = []
 	
-	# Signal that player turn has started
+	# Signal that player turn has started (keep for backward compatibility)
 	emit_signal("player_turn_started", player_id)
+	
+	# Emit targeting started event
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.TARGETING_STARTED, {"player_index": player_id})
+	
 	return true
 
 # Handle input during targeting
@@ -71,6 +77,14 @@ func _on_target_selected(weapon, target_position):
 	# Reset the current selection
 	selected_weapon = null
 	
+	# Emit target selected event
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.TARGET_SELECTED, {
+			"weapon": weapon,
+			"target_position": target_position
+		})
+	
 	# Check if max targets reached
 	if selected_weapons.size() >= max_targets:
 		on_end_targeting_button_pressed()
@@ -85,7 +99,16 @@ func on_end_targeting_button_pressed():
 	# Deactivate targeting
 	targeting_manager.deactivate_targeting()
 	
-	# Signal that targeting is done
+	# Emit targeting completed event
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event(GameEvents.TARGETING_COMPLETED, {
+			"player_index": current_player_id,
+			"weapons": selected_weapons,
+			"targets": targets
+		})
+	
+	# Signal that targeting is done (keep for backward compatibility)
 	emit_signal("targeting_completed", current_player_id, selected_weapons, targets)
 
 # Get the current targeting data

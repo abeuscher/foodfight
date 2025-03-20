@@ -25,7 +25,7 @@ We've also enhanced the attack visualization, implemented a damage system, and a
 ## Important Files
 - game_state_machine.gd - For handling phase transitions
 - Main UI - For displaying the interstitial screens
-- game_ui_manager.gd - For managing UI elements
+- base_ui_manager.gd - For managing UI elements
 
 ## Development Guidelines
 1. Do not give any code partials that are longer than 5 lines. If your rewrite is longer than 5 lines, provide the whole file.

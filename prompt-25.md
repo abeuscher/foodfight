@@ -13,8 +13,8 @@ Our game currently uses direct references between components, leading to several
 ```gdscript
 # Current approach with direct references
 func some_function():
-    if game_ui_manager:  # Always checking if null
-        game_ui_manager.update_phase_display("Targeting")
+    if base_ui_manager:  # Always checking if null
+        base_ui_manager.update_phase_display("Targeting")
     else:
         print("WARNING: UI Manager not available")
 ```
@@ -82,7 +82,7 @@ func initialize_components():
     # Register components as services
     register_service("GameBoard", game_board)
     register_service("GameStateMachine", game_state_machine)
-    register_service("GameUIManager", game_ui_manager)
+    register_service("BaseUIManager", base_ui_manager)
     # ... more service registrations
 ```
 
@@ -92,11 +92,11 @@ Start updating existing code to use the service locator:
 
 ```gdscript
 # Before:
-if game_ui_manager:
-    game_ui_manager.update_phase_display("Targeting")
+if base_ui_manager:
+    base_ui_manager.update_phase_display("Targeting")
 
 # After:
-var ui_manager = get_service("GameUIManager")
+var ui_manager = get_service("BaseUIManager")
 if ui_manager:
     ui_manager.update_phase_display("Targeting")
 ```
@@ -114,10 +114,10 @@ func get_service(service_name: String, create_default: bool = false) -> Object:
     if create_default:
         # Create appropriate default based on service name
         match service_name:
-            "GameUIManager":
+            "BaseUIManager":
                 var new_service = Node.new()
-                new_service.name = "GameUIManager"
-                new_service.set_script(load("res://scripts/ui/game_ui_manager.gd"))
+                new_service.name = "BaseUIManager"
+                new_service.set_script(load("res://scripts/ui/base_ui_manager.gd"))
                 register_service(service_name, new_service)
                 return new_service
                 

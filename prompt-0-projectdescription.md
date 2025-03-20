@@ -73,7 +73,7 @@
 GameManager (Singleton)
 ├─ Initializes & References → GameBoard
 ├─ Initializes & References → GameStateMachine
-├─ Initializes & References → GameUIManager
+├─ Initializes & References → BaseUIManager
 ├─ Initializes & References → PlayerManager
 ├─ Initializes & References → PlacementState
 ├─ Initializes & References → TargetingState
@@ -97,12 +97,12 @@ GameStateMachine
 ├─ Depends on → WeaponPlacement
 ├─ Depends on → TargetingState
 ├─ Depends on → AttackState
-├─ Depends on → GameUIManager
+├─ Depends on → BaseUIManager
 ├─ Depends on → PlayerManager
 ├─ Contains → TurnManager
 └─ Contains → AIController
 
-GameUIManager
+BaseUIManager
 ├─ Coordinates → BaseUIManager
 ├─ Delegates to → PlayerUIManager
 ├─ Delegates to → PhaseUIManager
@@ -121,7 +121,7 @@ AIController
 ├─ Depends on → AIOpponent
 ├─ Depends on → GameStateMachine
 ├─ Depends on → PlayerManager
-└─ Signals to → GameUIManager (via AIUIManager)
+└─ Signals to → BaseUIManager (via AIUIManager)
 
 PlacementState
 ├─ Depends on → WeaponTypes
@@ -191,7 +191,7 @@ FoodFight/
     │   ├── attack_state.gd
     │   ├── game_manager.gd
     │   ├── game_state_machine.gd
-    │   ├── game_ui_manager.gd
+    │   ├── base_ui_manager.gd
     │   ├── placement_state.gd
     │   ├── player_manager.gd
     │   ├── targeting_manager.gd
@@ -200,7 +200,7 @@ FoodFight/
     │   └── weapon_manager.gd
     ├── ui/
     │   ├── base_ui_manager.gd
-    │   ├── game_ui_manager.gd
+    │   ├── base_ui_manager.gd
     │   ├── phase_ui_manager.gd
     │   ├── placement_ui_manager.gd
     │   ├── player_ui_manager.gd

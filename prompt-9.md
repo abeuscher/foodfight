@@ -108,7 +108,7 @@ FoodFight/
     │   ├── attack_state.gd
     │   ├── game_manager.gd
     │   ├── game_state_machine.gd
-    │   ├── game_ui_manager.gd
+    │   ├── base_ui_manager.gd
     │   ├── placement_state.gd
     │   ├── player_manager.gd
     │   ├── targeting_manager.gd

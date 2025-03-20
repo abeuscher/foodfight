@@ -1,5 +1,8 @@
 extends Node2D
 
+# Pre-load essential base classes
+const BaseUIListener = preload("res://scripts/ui/base_ui_listener.gd")
+
 # UI element references using @onready for cleaner initialization
 @onready var weapon_buttons_container = $UI/BottomBar/WeaponButtonsContainer
 @onready var targeting_buttons_container = $UI/BottomBar/TargetingButtonsContainer
@@ -13,7 +16,7 @@ extends Node2D
 # References to components - use same property names as game_manager.gd
 @onready var game_board = $GameBoard
 @onready var game_state_machine = $GameStateMachine
-@onready var game_ui_manager = $GameUIManager
+@onready var base_ui_manager = $BaseUIManager  # Changed variable name AND node reference
 @onready var player_manager = $PlayerManager
 @onready var placement_state = $PlacementState
 @onready var targeting_state = $TargetingState
@@ -23,7 +26,6 @@ extends Node2D
 @onready var ai_opponent = $AIOpponent
 
 # UI manager sub-components for direct access if needed
-var base_ui_manager
 var player_ui_manager
 var phase_ui_manager
 var placement_ui_manager
@@ -47,7 +49,7 @@ func _ready():
 	# Store references in GameManager (property names must match)
 	game_manager.game_board = game_board
 	game_manager.game_state_machine = game_state_machine
-	game_manager.game_ui_manager = game_ui_manager
+	game_manager.base_ui_manager = base_ui_manager  # Both sides now match
 	game_manager.player_manager = player_manager
 	game_manager.placement_state = placement_state
 	game_manager.targeting_state = targeting_state
@@ -69,12 +71,12 @@ func _ready():
 	await get_tree().process_frame
 	
 	# Connect AI signals directly instead of using connect_ai_signals
-	if ai_opponent and game_ui_manager:
+	if ai_opponent and base_ui_manager:  # Changed reference
 		# Connect thinking signals directly
-		if !ai_opponent.is_connected("thinking_started", Callable(game_ui_manager, "show_ai_thinking")):
-			ai_opponent.connect("thinking_started", Callable(game_ui_manager, "show_ai_thinking"))
-		if !ai_opponent.is_connected("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking")):
-			ai_opponent.connect("thinking_completed", Callable(game_ui_manager, "hide_ai_thinking"))
+		if !ai_opponent.is_connected("thinking_started", Callable(base_ui_manager, "show_ai_thinking")):  # Changed
+			ai_opponent.connect("thinking_started", Callable(base_ui_manager, "show_ai_thinking"))  # Changed
+		if !ai_opponent.is_connected("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking")):  # Changed
+			ai_opponent.connect("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking"))  # Changed
 			
 	# Initialize the core game components 
 	game_state_machine.initialize(
@@ -83,7 +85,7 @@ func _ready():
 		weapon_placement, 
 		targeting_state,
 		attack_state,
-		game_ui_manager,
+		base_ui_manager,  # Changed reference 
 		player_manager
 	)
 	
@@ -102,7 +104,7 @@ func _ready():
 	)
 	
 	# Store UI manager sub-components for direct access if needed
-	# Wait until the game_ui_manager has initialized its sub-components
+	# Wait until the base_ui_manager has initialized its sub-components
 	await get_tree().process_frame
 
 	# Show the title screen first before starting the game
@@ -128,6 +130,12 @@ func _ready():
 		game_initialized = await GameManager.initialize_game(self)
 	else:
 		push_error("GameManager singleton not found")
+	
+	# Add recovery helper to help with service issues
+	var recovery_helper = Node.new()
+	recovery_helper.name = "RecoveryHelper"
+	recovery_helper.set_script(load("res://scripts/recovery_helper.gd"))
+	add_child(recovery_helper)
 
 func _on_game_initialized():
 	print("Game initialization complete, starting game...")
@@ -173,7 +181,7 @@ func _input(event):
 			if GameManager.targeting_state:
 				GameManager.targeting_state.handle_input(event)
 
-# Handle targeting button press - this is now a callback for game_ui_manager
+# Handle targeting button press - this is now a callback for base_ui_manager
 func _on_targeting_button_pressed(weapon, player_id):
 	var targeting_state = GameManager.targeting_state
 	var targeting_manager = GameManager.targeting_manager

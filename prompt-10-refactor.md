@@ -12,7 +12,7 @@ I need help refactoring my Godot game code to remove excessive defensive program
 GameManager (Singleton)
 ├─ Initializes & References → GameBoard
 ├─ Initializes & References → GameStateMachine
-├─ Initializes & References → GameUIManager
+├─ Initializes & References → BaseUIManager
 ├─ Initializes & References → PlayerManager
 ├─ Initializes & References → PlacementState
 ├─ Initializes & References → TargetingState
@@ -36,7 +36,7 @@ GameStateMachine
 ├─ Depends on → WeaponPlacement
 ├─ Depends on → TargetingState
 ├─ Depends on → AttackState
-├─ Depends on → GameUIManager
+├─ Depends on → BaseUIManager
 └─ Depends on → PlayerManager
 
 PlacementState
@@ -96,7 +96,7 @@ FoodFight/
     │   ├── attack_state.gd
     │   ├── game_manager.gd
     │   ├── game_state_machine.gd
-    │   ├── game_ui_manager.gd
+    │   ├── base_ui_manager.gd
     │   ├── placement_state.gd
     │   ├── player_manager.gd
     │   ├── targeting_manager.gd

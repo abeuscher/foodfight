@@ -1,4 +1,6 @@
-extends Node
+# Ensure the class_name is loaded for proper resolution
+class_name BaseUIManager
+extends BaseUIListener
 
 signal title_screen_completed
 
@@ -30,7 +32,13 @@ var ai_ui_manager
 var is_initialized = false
 var is_initializing = false
 
+# Recursion guards - class level tracking of active method calls
+var _active_method_calls = {}
+
 func _ready():
+	# Call parent ready first, which will register events
+	super._ready()
+	
 	# Mark that initialization has started
 	is_initializing = true
 	print("BaseUIManager: Starting initialization")
@@ -53,6 +61,18 @@ func _ready():
 	is_initialized = true
 	is_initializing = false
 	print("Base UI Manager initialized")
+	
+	# Register self as BaseUIManager service - CHANGED FROM BaseUIManager
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.register_service("BaseUIManager", self)
+		print("BaseUIManager registered as BaseUIManager service")
+		
+		# Also register child managers as services
+		if phase_ui_manager:
+			game_manager.register_service("PhaseUIManager", phase_ui_manager)
+		if player_ui_manager:
+			game_manager.register_service("PlayerUIManager", player_ui_manager)
 
 # Initialize references to scene nodes
 func _initialize_scene_references():
@@ -96,6 +116,8 @@ func _initialize_scene_references():
 
 # Initialize child UI manager components
 func _initialize_child_managers():
+	print("====== CRITICAL DEBUG: Creating UI manager children ======")
+	
 	# Create player UI manager if not exists
 	if !player_ui_manager:
 		player_ui_manager = Node.new()
@@ -105,10 +127,13 @@ func _initialize_child_managers():
 	
 	# Create phase UI manager if not exists
 	if !phase_ui_manager:
+		print("  - Creating new PhaseUIManager")
 		phase_ui_manager = Node.new()
 		phase_ui_manager.name = "PhaseUIManager"
 		phase_ui_manager.set_script(load("res://scripts/ui/phase_ui_manager.gd"))
 		add_child(phase_ui_manager)
+	else:
+		print("  - PhaseUIManager already exists")
 	
 	# Create placement UI manager if not exists
 	if !placement_ui_manager:
@@ -133,6 +158,8 @@ func _initialize_child_managers():
 
 # Initialize dependencies for child managers
 func _initialize_child_manager_dependencies():
+	print("====== CRITICAL DEBUG: Initializing UI child dependencies ======")
+	
 	# Find the main scene - try multiple approaches
 	var ui_container_node = null
 	var root = get_tree().get_root()
@@ -158,7 +185,22 @@ func _initialize_child_manager_dependencies():
 		var phase_label = ui_container_node.get_node_or_null("UI/TopBar/HBoxContainer/PhaseContainer/PhaseLabel")
 		
 		if phase_ui_manager:
+			print("  - Initializing PhaseUIManager")
+			print("    - turn_label: " + ("FOUND" if turn_label else "MISSING"))
+			print("    - phase_label: " + ("FOUND" if phase_label else "MISSING"))
+			print("    - title_screen: " + ("FOUND" if title_screen else "MISSING"))
+			print("    - player_manager: " + ("FOUND" if player_manager else "MISSING"))
+			
 			phase_ui_manager.initialize(turn_label, phase_label, title_screen, player_manager)
+			print("  - PhaseUIManager initialized")
+			print("  - Has update_phase_ui: " + str(phase_ui_manager.has_method("update_phase_ui")))
+			
+			# Ensure it's registered directly as well
+			if Engine.has_singleton("GameManager"):
+				print("  - Registering PhaseUIManager directly")
+				Engine.get_singleton("GameManager").register_service("PhaseUIManager", phase_ui_manager)
+		else:
+			print("  - ERROR: PhaseUIManager is null, cannot initialize!")
 		
 		# Setup placement UI manager
 		var weapon_buttons_container = ui_container_node.get_node_or_null("UI/BottomBar/WeaponButtonsContainer")
@@ -188,28 +230,50 @@ func _ensure_game_components():
 	if Engine.has_singleton("GameManager"):
 		var GameManager = Engine.get_singleton("GameManager")
 		
+		if !weapon_manager and GameManager.has_method("get_service"):
+			weapon_manager = GameManager.get_service("WeaponManager")
+		
+		if !targeting_state and GameManager.has_method("get_service"):
+			targeting_state = GameManager.get_service("TargetingState")
+		
+		if !targeting_manager and GameManager.has_method("get_service"):
+			targeting_manager = GameManager.get_service("TargetingManager")
+		
+		if !weapon_types and GameManager.has_method("get_service"):
+			weapon_types = GameManager.get_service("WeaponTypes")
+		
+		if !turn_manager and GameManager.has_method("get_service"):
+			turn_manager = GameManager.get_service("TurnManager")
+		
+		if !ai_controller and GameManager.has_method("get_service"):
+			ai_controller = GameManager.get_service("AIController")
+			
+		if !game_state_machine and GameManager.has_method("get_service"):
+			game_state_machine = GameManager.get_service("GameStateMachine")
+		
+		# Fallback to older methods if service locator is not yet fully implemented
 		if !weapon_manager and GameManager.has_method("get_weapon_manager"):
 			weapon_manager = GameManager.get_weapon_manager()
-		
+			
 		if !targeting_state and GameManager.has_method("get_targeting_state"):
 			targeting_state = GameManager.get_targeting_state()
-		
+			
 		if !targeting_manager and GameManager.has_method("get_targeting_manager"):
 			targeting_manager = GameManager.get_targeting_manager()
-		
+			
 		if !weapon_types and GameManager.has_method("get_weapon_types"):
 			weapon_types = GameManager.get_weapon_types()
-		
+			
 		if !turn_manager and GameManager.has_method("get_turn_manager"):
 			turn_manager = GameManager.get_turn_manager()
-		
+			
 		if !ai_controller and GameManager.has_method("get_ai_controller"):
 			ai_controller = GameManager.get_ai_controller()
 			
 		if !game_state_machine and GameManager.has_method("get_game_state_machine"):
 			game_state_machine = GameManager.get_game_state_machine()
 		
-		# Get references directly from GameManager fields if methods not available
+		# Fallback to direct field access as last resort
 		if !weapon_manager and "weapon_manager" in GameManager:
 			weapon_manager = GameManager.weapon_manager
 			
@@ -263,110 +327,250 @@ func _update_child_manager_dependencies():
 # Handle title screen animation completed
 func _on_title_screen_animation_completed():
 	emit_signal("title_screen_completed")
+	emit_event(GameEvents.TITLE_SCREEN_COMPLETED)
 
-# Show title screen for upcoming phase
-func show_phase_title(phase_name):
-	if !is_initialized and !is_initializing:
-		print("BaseUIManager: Not initialized, deferring phase title")
-		call_deferred("show_phase_title", phase_name)
+# Event handlers
+func on_ui_update_required(event_data):
+	update_ui(event_data.state, event_data.player_index)
+	
+func on_phase_changed(event_data):
+	update_game_phase(event_data.phase_text)
+	
+func on_player_changed(event_data):
+	update_player_ui(event_data.player_index)
+	
+func on_ai_thinking_started(_event_data = null):
+	show_ai_thinking()
+	
+func on_ai_thinking_completed(_event_data = null):
+	# Enhanced debug to help track this event
+	print("BaseUIManager: on_ai_thinking_completed called")
+	hide_ai_thinking()
+	
+func on_game_over(event_data):
+	show_game_over(event_data.winning_player)
+	
+func on_state_changed(event_data):
+	print("BaseUIManager: Handling STATE_CHANGED event: " + str(event_data))
+	update_ui(event_data.new_state, event_data.player_index)
+
+# Getter for phase_ui_manager to maintain API compatibility
+func get_phase_ui_manager():
+	return phase_ui_manager
+
+# Method to safely call a function with fallbacks - FIXED RECURSION ISSUE
+func _safe_ui_call(method_name, args = []):
+	# Check if we're already processing this method to prevent recursion
+	if _active_method_calls.has(method_name) and _active_method_calls[method_name]:
+		push_warning("BaseUIManager: Breaking recursive call cycle for method: " + method_name)
+		return null
+	
+	# Mark this method as being processed
+	_active_method_calls[method_name] = true
+	
+	# Track result to return after cleaning up
+	var result = null
+	
+	# Determine which manager should handle this method
+	var manager_name = null
+	
+	if method_name in ["update_player_ui", "update_ingredients_display"]:
+		manager_name = "player_ui_manager"
+	elif method_name in ["update_game_phase", "update_current_turn", "show_phase_title", "show_game_over", "update_phase_ui"]:
+		manager_name = "phase_ui_manager"
+	elif method_name in ["show_ai_thinking", "hide_ai_thinking"]:
+		manager_name = "ai_ui_manager"
+	elif method_name in ["update_weapon_placement_ui", "update_base_placement_ui"]:
+		manager_name = "placement_ui_manager"
+	elif method_name in ["update_targeting_ui"]:
+		manager_name = "targeting_ui_manager"
+	
+	if manager_name:
+		var manager = get(manager_name)
+		if manager and manager.has_method(method_name):
+			result = _call_with_args(manager, method_name, args)
+	
+	# Clear the recursion guard for this method
+	_active_method_calls[method_name] = false
+	
+	return result
+
+# Helper to call a method with variable number of arguments
+func _call_with_args(object, method_name, args):
+	match args.size():
+		0: return object.call(method_name)
+		1: return object.call(method_name, args[0])
+		2: return object.call(method_name, args[0], args[1])
+		3: return object.call(method_name, args[0], args[1], args[2])
+		_: 
+			push_warning("BaseUIManager: Unsupported argument count for " + method_name)
+			return null
+
+# Update the update_ui method to avoid recursive calls
+func update_ui(current_state, current_player_index):
+	# Check for recursion
+	if _active_method_calls.has("update_ui") and _active_method_calls["update_ui"]:
+		print("BaseUIManager: Breaking recursive update_ui call")
 		return
 	
-	if !phase_ui_manager:
-		print("BaseUIManager: Phase UI manager not available")
-		call_deferred("emit_signal", "title_screen_completed")
-		return
-		
-	phase_ui_manager.show_phase_title(phase_name)
-
-# Update UI based on game state
-func update_ui(current_state, current_player_index):
+	_active_method_calls["update_ui"] = true
+	
 	if !is_initialized and !is_initializing:
-		print("BaseUIManager: Not initialized, deferring UI update")
-		call_deferred("update_ui", current_state, current_player_index)
-		return
+		await get_tree().process_frame
 	
 	print("BaseUIManager: Updating UI for state " + str(current_state) + " for player " + str(current_player_index + 1))
 	
 	# Ensure we have game components
 	_ensure_game_components()
 	
-	# Update player UI
-	if player_ui_manager:
+	# Update player UI directly without using _safe_ui_call
+	if player_ui_manager and player_ui_manager.has_method("update_player_ui"):
 		player_ui_manager.update_player_ui(current_player_index)
 	
-	# Update phase UI
-	if phase_ui_manager and game_state_machine:
+	# Update phase UI directly
+	if phase_ui_manager and phase_ui_manager.has_method("update_phase_ui"):
 		phase_ui_manager.update_phase_ui(current_state, current_player_index)
 	
 	# Update state-specific UI based on current state
 	if game_state_machine:
 		match current_state:
 			game_state_machine.GameState.BASE_PLACEMENT:
-				if placement_ui_manager:
+				if placement_ui_manager and placement_ui_manager.has_method("update_base_placement_ui"):
 					placement_ui_manager.update_base_placement_ui(current_state, current_player_index)
 			
 			game_state_machine.GameState.WEAPON_PLACEMENT:
-				if placement_ui_manager:
+				if placement_ui_manager and placement_ui_manager.has_method("update_weapon_placement_ui"):
 					placement_ui_manager.update_weapon_placement_ui(current_state, current_player_index)
 			
 			game_state_machine.GameState.TARGETING:
-				if targeting_ui_manager:
+				if targeting_ui_manager and targeting_ui_manager.has_method("update_targeting_ui"):
 					targeting_ui_manager.update_targeting_ui(current_state, current_player_index)
 	
-	# For AI turns, show thinking indicator
+	# For AI turns, show thinking indicator - direct calls
 	var is_ai_turn = (current_player_index == 1)
-	if is_ai_turn and ai_ui_manager:
-		ai_ui_manager.show_ai_thinking()
-	elif ai_ui_manager:
-		ai_ui_manager.hide_ai_thinking()
+	if is_ai_turn:
+		if ai_ui_manager and ai_ui_manager.has_method("show_ai_thinking"):
+			ai_ui_manager.show_ai_thinking()
+	else:
+		if ai_ui_manager and ai_ui_manager.has_method("hide_ai_thinking"):
+			ai_ui_manager.hide_ai_thinking()
 	
-	# Update ingredients display
-	if player_ui_manager:
-		player_ui_manager.update_ingredients_display()
+	# Clear recursion guard
+	_active_method_calls["update_ui"] = false
 
-# Forward methods to appropriate child managers
+# Forward methods to appropriate child managers - add recursion guards
 func handle_player_turn_update(player_index):
-	if !player_manager:
-		print("BaseUIManager: Missing player_manager for turn update")
+	if _active_method_calls.has("handle_player_turn_update") and _active_method_calls["handle_player_turn_update"]:
 		return
 		
-	if phase_ui_manager:
+	_active_method_calls["handle_player_turn_update"] = true
+	
+	if !player_manager:
+		print("BaseUIManager: Missing player_manager for turn update")
+		_active_method_calls["handle_player_turn_update"] = false
+		return
+		
+	if phase_ui_manager and phase_ui_manager.has_method("update_current_turn"):
 		phase_ui_manager.update_current_turn(player_manager.get_player_name(player_index))
+	
+	_active_method_calls["handle_player_turn_update"] = false
 
 # Show AI thinking indicator (forwarded to AI UI manager)
 func show_ai_thinking():
-	if ai_ui_manager:
+	if _active_method_calls.has("show_ai_thinking") and _active_method_calls["show_ai_thinking"]:
+		print("BaseUIManager: Breaking recursive show_ai_thinking call")
+		return
+		
+	_active_method_calls["show_ai_thinking"] = true
+	
+	if ai_ui_manager and ai_ui_manager.has_method("show_ai_thinking"):
 		ai_ui_manager.show_ai_thinking()
+	
+	# Emit event after delegating to AI UI manager
+	emit_event(GameEvents.AI_THINKING_STARTED)
+	
+	_active_method_calls["show_ai_thinking"] = false
 
 # Hide AI thinking indicator (forwarded to AI UI manager)
 func hide_ai_thinking():
-	if ai_ui_manager:
+	if _active_method_calls.has("hide_ai_thinking") and _active_method_calls["hide_ai_thinking"]:
+		print("BaseUIManager: Breaking recursive hide_ai_thinking call")
+		return
+		
+	_active_method_calls["hide_ai_thinking"] = true
+	
+	if ai_ui_manager and ai_ui_manager.has_method("hide_ai_thinking"):
 		ai_ui_manager.hide_ai_thinking()
+	
+	# Emit event after delegating to AI UI manager (centralized event emission)
+	emit_event(GameEvents.AI_THINKING_COMPLETED)
+	
+	_active_method_calls["hide_ai_thinking"] = false
 
 # Update game phase (forwarded to phase UI manager)
 func update_game_phase(phase_text):
-	if phase_ui_manager:
+	if _active_method_calls.has("update_game_phase") and _active_method_calls["update_game_phase"]:
+		return
+		
+	_active_method_calls["update_game_phase"] = true
+	
+	if phase_ui_manager and phase_ui_manager.has_method("update_game_phase"):
 		phase_ui_manager.update_game_phase(phase_text)
-	else:
-		print("BaseUIManager: Phase UI manager not available for phase update")
+	
+	_active_method_calls["update_game_phase"] = false
 
 # Update current turn label (forwarded to phase UI manager)
 func update_current_turn(player_name):
-	if phase_ui_manager:
+	if _active_method_calls.has("update_current_turn") and _active_method_calls["update_current_turn"]:
+		return
+		
+	_active_method_calls["update_current_turn"] = true
+	
+	if phase_ui_manager and phase_ui_manager.has_method("update_current_turn"):
 		phase_ui_manager.update_current_turn(player_name)
-	else:
-		print("BaseUIManager: Phase UI manager not available for turn update")
+	
+	_active_method_calls["update_current_turn"] = false
+
+# Update player UI (forwarded to player UI manager) - Added for API compatibility
+func update_player_ui(player_index):
+	if _active_method_calls.has("update_player_ui") and _active_method_calls["update_player_ui"]:
+		return
+		
+	_active_method_calls["update_player_ui"] = true
+	
+	if player_ui_manager and player_ui_manager.has_method("update_player_ui"):
+		player_ui_manager.update_player_ui(player_index)
+	
+	_active_method_calls["update_player_ui"] = false
 
 # Show game over screen (forwarded to phase UI manager)
 func show_game_over(winning_player):
-	if phase_ui_manager:
+	if _active_method_calls.has("show_game_over") and _active_method_calls["show_game_over"]:
+		return
+		
+	_active_method_calls["show_game_over"] = true
+	
+	if phase_ui_manager and phase_ui_manager.has_method("show_game_over"):
 		phase_ui_manager.show_game_over(winning_player)
-	else:
-		print("BaseUIManager: Phase UI manager not available for game over")
+	
+	_active_method_calls["show_game_over"] = false
 
-# Connect signals from AI opponent
+# Connect signals from AI opponent - Added for API compatibility
 func connect_ai_signals(ai_opponent):
-	if ai_opponent and ai_ui_manager:
+	if ai_opponent and ai_ui_manager and ai_ui_manager.has_method("connect_ai_signals"):
 		ai_ui_manager.connect_ai_signals(ai_opponent)
-	else:
-		print("BaseUIManager: Cannot connect AI signals, missing references")
+
+# Method to handle deferred initialization and update - Added for API compatibility
+func initialize_managers_and_update(state, player_index):
+	print("BaseUIManager: Deferred initialization and update")
+	if !is_initialized:
+		await get_tree().process_frame  # Just waiting one frame, since our initialization is synchronous
+	
+	# Now try again with initialized managers
+	update_ui(state, player_index)
+
+# Method to initialize managers - Added for API compatibility
+func initialize_managers():
+	# Does nothing since initialization happens in _ready()
+	# Kept for API compatibility
+	return
