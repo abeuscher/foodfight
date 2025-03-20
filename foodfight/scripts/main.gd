@@ -16,7 +16,8 @@ const BaseUIListener = preload("res://scripts/ui/base_ui_listener.gd")
 # References to components - use same property names as game_manager.gd
 @onready var game_board = $GameBoard
 @onready var game_state_machine = $GameStateMachine
-@onready var base_ui_manager = $BaseUIManager  # Changed variable name AND node reference
+@onready var phase_manager = $PhaseManager
+@onready var base_ui_manager = $BaseUIManager
 @onready var player_manager = $PlayerManager
 @onready var placement_state = $PlacementState
 @onready var targeting_state = $TargetingState
@@ -38,108 +39,43 @@ var game_initialized = false
 func _ready():
 	print("Main scene loaded. Initializing game...")
 	
-	# Register the GameManager singleton
+	# Register the GameManager singleton - this is the ONLY place it should be created
 	if not Engine.has_singleton("GameManager"):
 		var game_manager = Node.new()
 		game_manager.name = "GameManager"
 		Engine.register_singleton("GameManager", game_manager)
 	
-	var game_manager = Engine.get_singleton("GameManager")
-	
-	# Store references in GameManager (property names must match)
-	game_manager.game_board = game_board
-	game_manager.game_state_machine = game_state_machine
-	game_manager.base_ui_manager = base_ui_manager  # Both sides now match
-	game_manager.player_manager = player_manager
-	game_manager.placement_state = placement_state
-	game_manager.targeting_state = targeting_state
-	game_manager.attack_state = attack_state
-	game_manager.weapon_types = weapon_types
-	game_manager.weapon_placement = weapon_placement
-	
-	# Initialize AI opponent
-	game_manager.ai_opponent = ai_opponent
-	ai_opponent.initialize(
-		game_board,
-		weapon_types,
-		weapon_placement,
-		player_manager,
-		attack_state.get_node("TargetingManager")
-	)
-	
-	# Let the UI managers initialize first
-	await get_tree().process_frame
-	
-	# Connect AI signals directly instead of using connect_ai_signals
-	if ai_opponent and base_ui_manager:  # Changed reference
-		# Connect thinking signals directly
-		if !ai_opponent.is_connected("thinking_started", Callable(base_ui_manager, "show_ai_thinking")):  # Changed
-			ai_opponent.connect("thinking_started", Callable(base_ui_manager, "show_ai_thinking"))  # Changed
-		if !ai_opponent.is_connected("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking")):  # Changed
-			ai_opponent.connect("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking"))  # Changed
-			
-	# Initialize the core game components 
-	game_state_machine.initialize(
-		game_board, 
-		weapon_types, 
-		weapon_placement, 
-		targeting_state,
-		attack_state,
-		base_ui_manager,  # Changed reference 
-		player_manager
-	)
-	
-	# Fix: Initialize placement_state with the correct 3 arguments
-	placement_state.initialize(
-		weapon_types, 
-		weapon_placement,
-		weapon_buttons_container
-	)
-	
-	# Fix: Remove the fourth argument to match the function signature
-	targeting_state.initialize(
-		game_board,
-		attack_state.get_node("WeaponManager"),
-		attack_state.get_node("TargetingManager")
-	)
-	
-	# Store UI manager sub-components for direct access if needed
-	# Wait until the base_ui_manager has initialized its sub-components
-	await get_tree().process_frame
-
-	# Show the title screen first before starting the game
-	if $UI/TitleScreen:
-		print("Showing title screen for base placement phase")
-		$UI/TitleScreen.visible = true
-		$UI/TitleScreen.show_title("Base Placement Phase")
-		await $UI/TitleScreen.animation_completed
-	
-	# Start the game
-	game_state_machine.start_game()
-
-	# Allow a frame to ensure all nodes are ready
-	await get_tree().process_frame
-
-	# Set up UI elements
-	_setup_ui()
-	
-	# Initialize the game through GameManager singleton
-	if GameManager:
+	# Initialize through GameManager singleton - this is the ONLY initialization path
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		
+		# Register all components but do NOT initialize them here
+		# GameManager will be responsible for initialization order
+		game_manager.game_board = game_board
+		game_manager.game_state_machine = game_state_machine
+		game_manager.base_ui_manager = base_ui_manager
+		game_manager.player_manager = player_manager
+		game_manager.placement_state = placement_state
+		game_manager.targeting_state = targeting_state
+		game_manager.attack_state = attack_state
+		game_manager.weapon_types = weapon_types
+		game_manager.weapon_placement = weapon_placement
+		game_manager.ai_opponent = ai_opponent
+		
+		# LET THE GAMEMANAGER DO ALL INITIALIZATION - no direct calls here
 		print("Starting game initialization through GameManager...")
-		GameManager.connect("game_initialized", Callable(self, "_on_game_initialized"))
-		game_initialized = await GameManager.initialize_game(self)
+		game_manager.connect("game_initialized", Callable(self, "_on_game_initialized"))
+		game_initialized = await game_manager.initialize_game(self)
 	else:
 		push_error("GameManager singleton not found")
-	
-	# Add recovery helper to help with service issues
-	var recovery_helper = Node.new()
-	recovery_helper.name = "RecoveryHelper"
-	recovery_helper.set_script(load("res://scripts/recovery_helper.gd"))
-	add_child(recovery_helper)
 
 func _on_game_initialized():
-	print("Game initialization complete, starting game...")
-	GameManager.start_game()
+	print("Game initialization complete")
+	_setup_ui()
+	
+	# Let GameManager control the game start sequence
+	if Engine.has_singleton("GameManager"):
+		Engine.get_singleton("GameManager").start_game()
 
 # Set up the UI elements
 func _setup_ui():

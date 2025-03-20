@@ -19,7 +19,6 @@ func initialize(p_main_scene):
 	create_ai_thinking_indicator()
 	
 	is_initialized = true
-	print("AI UI Manager initialized")
 	return self
 
 # Event handlers
@@ -60,13 +59,11 @@ func create_ai_thinking_indicator():
 		ai_thinking_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ai_thinking_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		ai_thinking_label.anchors_preset = Control.PRESET_FULL_RECT
-		print("AI thinking indicator added to bottom bar")
 	else:
 		print("Failed to add AI thinking indicator: Bottom bar not found")
 
 # Show AI thinking indicator
 func show_ai_thinking():
-	print("AI UI Manager: Showing AI thinking in bottom bar")
 	if !is_initialized:
 		return
 		
@@ -126,7 +123,6 @@ func hide_other_ui_elements(should_hide):
 
 # Hide AI thinking indicator
 func hide_ai_thinking():
-	print("Here is the AI Thinking Firing Here")
 	if !is_initialized:
 		return
 		

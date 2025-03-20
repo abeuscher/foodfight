@@ -18,6 +18,9 @@ var selected_weapon = null
 var placement_active = false
 var is_base_placement_phase = false
 
+# For recursion prevention
+var _active_method_calls = {}
+
 func _ready():
 	# Create weapon visualization if it doesn't exist
 	weapon_visualization = get_node_or_null("WeaponVisualization")
@@ -96,36 +99,126 @@ func start_base_placement_phase(player_id):
 
 # Start the placement phase for a player
 func start_placement_phase(player_id):
+	if _active_method_calls.get("start_placement_phase", false):
+		print("Preventing recursive call to start_placement_phase")
+		return
+		
+	_active_method_calls["start_placement_phase"] = true
+	
+	print("WeaponPlacement: Starting weapon placement phase for player", player_id + 1)
+	
+	# Store the current player
 	current_player_id = player_id
 	is_base_placement_phase = false
 	placement_active = true
 	
-	# Reset resources only at the start of a new game
-	if player_id == 0 and player_resources[0] <= 0 and player_resources[1] <= 0:
-		player_resources[0] = 30
-		player_resources[1] = 30
+	# Clear selected weapon
+	selected_weapon = null
 	
-	# Signal resource amount to update UI
-	emit_signal("ingredients_updated", player_id, player_resources[player_id])
+	# Hide the preview
+	if weapon_visualization:
+		weapon_visualization.show_preview(false)
+	
+	# Signal state change to update UI
+	emit_event("PLACEMENT_STARTED", {
+		"player_id": player_id, 
+		"phase": "weapon"
+	})
+	
+	# Trigger an explicit weapon button update via the placement state
+	var placement_state = get_service("PlacementState")
+	if placement_state and placement_state.has_method("create_weapon_buttons_for_current_state"):
+		placement_state.create_weapon_buttons_for_current_state()
+	
+	_active_method_calls["start_placement_phase"] = false
 
 # End the placement phase for the current player
 func end_placement_phase():
+	if _active_method_calls.get("end_placement_phase", false):
+		print("Preventing recursive call to end_placement_phase")
+		return
+		
+	_active_method_calls["end_placement_phase"] = true
+	
 	placement_active = false
 	selected_weapon = null
+	
+	# Use the service pattern correctly - get phase manager through service locator
+	var phase_manager = get_service("PhaseManager")
+	
+	# Notify phase manager that this player completed their placements
+	if phase_manager and phase_manager.has_method("base_placement_completed"):
+		if is_base_placement_phase:
+			print("WeaponPlacement: Notifying PhaseManager of base placement completion")
+			phase_manager.base_placement_completed(current_player_id)
+		else:
+			print("WeaponPlacement: Notifying PhaseManager of weapon placement completion")
+			phase_manager.weapon_placement_completed(current_player_id)
+	else:
+		# Fallback to game state machine
+		print("WeaponPlacement: PhaseManager not found, falling back to GameStateMachine")
+		var game_state_machine = get_service("GameStateMachine")
+		if game_state_machine:
+			if is_base_placement_phase:
+				game_state_machine._on_base_placement_complete(current_player_id)
+			else:
+				game_state_machine.placement_completed()
+	
+	_active_method_calls["end_placement_phase"] = false
 
-# Handle input for weapon placement
+# Select a weapon for placement based on ID
+func select_weapon_for_placement(weapon_id):
+	print("WeaponPlacement: Selecting weapon for placement with ID:", weapon_id)
+	
+	# Get the weapon data
+	var weapon_data = null
+	
+	# Try to access weapon_types directly first
+	if weapon_types != null:
+		weapon_data = weapon_types.get_weapon_by_id(weapon_id)
+		print("WeaponPlacement: Found weapon data for ID", weapon_id, ":", weapon_data != null)
+	else:
+		# If weapon_types is null, try to recover it from GameManager
+		print("WeaponPlacement: weapon_types is null, trying to retrieve from GameManager")
+		if Engine.has_singleton("GameManager"):
+			weapon_types = Engine.get_singleton("GameManager").get_service("WeaponTypes")
+			if weapon_types != null:
+				print("WeaponPlacement: Retrieved weapon_types from GameManager: success")
+				weapon_data = weapon_types.get_weapon_by_id(weapon_id)
+			else:
+				print("WeaponPlacement: Failed to retrieve weapon_types from GameManager")
+				return
+	
+	if !weapon_data:
+		print("WeaponPlacement: ERROR: No weapon data found for ID:", weapon_id)
+		return
+	
+	# Store the selected weapon
+	selected_weapon = weapon_data
+	
+	# Initialize the preview
+	if weapon_visualization:
+		weapon_visualization.update_preview_size(weapon_data)
+		weapon_visualization.show_preview(true)
+		print("WeaponPlacement: Preview initialized and shown for weapon:", weapon_data.name)
+	
+	# Emit event to notify of weapon selection
+	emit_event("WEAPON_SELECTED", {
+		"weapon_id": weapon_id,
+		"player_id": current_player_id
+	})
+
+# Handle input for weapon placement - simplified to avoid conflicts
 func handle_input(event):
 	if !placement_active:
 		return
 	
+	# Only handle mouse motion for preview updates
 	if event is InputEventMouseMotion:
 		update_placement_preview(event.global_position)
 	
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if is_base_placement_phase:
-			attempt_base_placement(event.global_position)
-		else:
-			attempt_weapon_placement(event.global_position)
+	# Mouse clicks are now handled directly in placement_state.gd
+	# We no longer handle clicks here to avoid duplicate handling
 
 # Update the placement preview based on mouse position
 func update_placement_preview(global_pos):
@@ -144,10 +237,6 @@ func update_placement_preview(global_pos):
 		# Check if placement is valid
 		var is_valid = can_place_at_position(selected_weapon, cell.position, current_player_id)
 		
-		# Debug info
-		if is_base_placement_phase:
-			print("Updating BASE preview at", cell.position, "valid:", is_valid)
-		
 		# Update the visual preview
 		weapon_visualization.update_preview_size(selected_weapon)
 		weapon_visualization.update_preview_position(cell.position, is_valid)
@@ -155,7 +244,11 @@ func update_placement_preview(global_pos):
 
 # Try to place a weapon at the given position
 func attempt_weapon_placement(global_pos):
+	# Simplified output - don't log position coordinates
+	print("WeaponPlacement: Attempting weapon placement")
+	
 	if !selected_weapon:
+		print("WeaponPlacement: No weapon selected for placement")
 		return
 	
 	var cell = game_board.get_cell_at_position(global_pos)
@@ -175,17 +268,27 @@ func attempt_weapon_placement(global_pos):
 			# Deduct resources
 			player_resources[current_player_id] -= cost
 			emit_signal("ingredients_updated", current_player_id, player_resources[current_player_id])
+			
+			# Hide the preview after placing
+			if weapon_visualization:
+				weapon_visualization.show_preview(false)
+			
+			# Clear selected weapon to prepare for next selection
+			selected_weapon = null
 
 # Try to place a base at the given position
 func attempt_base_placement(global_pos):
+	print("WeaponPlacement: Attempting base placement at ", global_pos)
+	
 	if base_placement_complete[current_player_id]:
+		print("WeaponPlacement: Base placement already complete for player", current_player_id)
 		return
 	
 	# Make sure weapon_types is initialized
 	if weapon_types == null:
 		print("ERROR: weapon_types is null in attempt_base_placement")
 		if Engine.has_singleton("GameManager"):
-			weapon_types = Engine.get_singleton("GameManager").weapon_types
+			weapon_types = Engine.get_singleton("GameManager").get_service("WeaponTypes")
 		if weapon_types == null:
 			print("ERROR: Could not get weapon_types from GameManager")
 			return
@@ -198,26 +301,105 @@ func attempt_base_placement(global_pos):
 	
 	var cell = game_board.get_cell_at_position(global_pos)
 	if !cell:
+		print("WeaponPlacement: No cell found at position ", global_pos)
 		return
 	
+	print("WeaponPlacement: Found cell at ", cell.position, " for base placement")
+	
 	# Check if placement is valid
-	if can_place_at_position(base_weapon, cell.position, current_player_id):
+	var is_valid = can_place_at_position(base_weapon, cell.position, current_player_id)
+	print("WeaponPlacement: Base placement valid: ", is_valid)
+	
+	if is_valid:
 		# Place the base
 		place_weapon(base_weapon, cell.position, current_player_id)
 		
 		# Mark base placement as complete for this player
 		base_placement_complete[current_player_id] = true
+		print("WeaponPlacement: Base placement completed for player ", current_player_id + 1)
 		
 		# Clear selected weapon
 		selected_weapon = null
 		
-		# Update end placement button - use the correct approach with refactored UI
-		var GameManager = Engine.get_singleton("GameManager")
-		if GameManager:
-			# Call through the state machine to handle UI updates properly
-			GameManager.game_state_machine._on_base_placement_complete(current_player_id)
+		# Hide the preview after placing
+		if weapon_visualization:
+			weapon_visualization.show_preview(false)
+		
+		# First get the service, then check it properly - following Service Locator Pattern
+		var phase_manager = get_service("PhaseManager")
+		
+		# Defensive programming - check if service exists AND has required method
+		if phase_manager and phase_manager.has_method("base_placement_completed"):
+			print("Notifying PhaseManager of base placement completion")
+			phase_manager.base_placement_completed(current_player_id)
 		else:
-			push_error("GameManager singleton not available")
+			# Fallback to game state machine with proper error logging
+			print("WARNING: PhaseManager service not available, falling back to GameStateMachine")
+			var game_manager = Engine.get_singleton("GameManager")
+			if game_manager and game_manager.game_state_machine:
+				game_manager.game_state_machine._on_base_placement_complete(current_player_id)
+			else:
+				push_error("GameManager or game_state_machine not available")
+
+# Place a weapon on the game board
+func place_weapon(weapon, position, player_id):
+	# Handle case where weapon is an integer instead of a weapon object
+	if typeof(weapon) == TYPE_INT:
+		print("WARNING: Received integer weapon instead of weapon object. Converting...")
+		# If we're in base placement phase, get the base weapon
+		if is_base_placement_phase:
+			weapon = weapon_types.get_base_weapon()
+			print("Using base weapon for placement instead of integer value")
+		# Otherwise try to get weapon by index
+		elif weapon >= 0 and weapon < weapon_types.available_weapons.size():
+			weapon = weapon_types.available_weapons[weapon]
+		else:
+			print("ERROR: Invalid weapon index: ", weapon)
+			return
+	
+	# Handle case where position is a Dictionary instead of Vector2
+	var pos_vector = position
+	if typeof(position) == TYPE_DICTIONARY:
+		print("WARNING: Received Dictionary position instead of Vector2. Converting...")
+		if "x" in position and "y" in position:
+			pos_vector = Vector2(position.x, position.y)
+			print("Converted position dictionary to Vector2:", pos_vector)
+		else:
+			print("ERROR: Position dictionary missing x/y coordinates:", position)
+			return
+	
+	# Check if placement position is within bounds
+	if pos_vector.x < 0 or pos_vector.y < 0 or \
+	   pos_vector.x + weapon.size.x > game_board.grid_size.x or \
+	   pos_vector.y + weapon.size.y > game_board.grid_size.y:
+		print("ERROR: Cannot place weapon at position " + str(pos_vector) + 
+			  " with size " + str(weapon.size) + " - would be out of bounds")
+		return
+	
+	# Mark cells as occupied by this weapon
+	for x in range(weapon.size.x):
+		for y in range(weapon.size.y):
+			var cell_pos = Vector2(pos_vector.x + x, pos_vector.y + y)
+			
+			# Double-check that we're within bounds before accessing the grid
+			if cell_pos.x >= 0 and cell_pos.x < game_board.grid_size.x and \
+			   cell_pos.y >= 0 and cell_pos.y < game_board.grid_size.y:
+				var cell = game_board.grid[int(cell_pos.x)][int(cell_pos.y)]
+				
+				cell.occupied_by = {
+					"weapon_data": weapon,
+					"player_id": player_id,
+					"root_position": pos_vector,  # Store the root cell position for reference
+					"relative_position": Vector2(x, y)  # Store position relative to root cell
+				}
+			else:
+				print("WARNING: Cell position out of bounds:", cell_pos)
+	
+	# Add visual representation
+	game_board.visual_manager.create_weapon_sprite(weapon.id, pos_vector, player_id)
+	
+	# Signal that a weapon has been placed
+	emit_signal("weapon_placed", player_id, weapon, pos_vector)
 
 # Check if a weapon can be placed at the given position
 func can_place_at_position(weapon, position, player_id):
@@ -276,138 +458,12 @@ func is_on_player_territory(position, size, player_id):
 	
 	return true
 
-# Place a weapon on the game board
-func place_weapon(weapon, position, player_id):
-	# Handle case where weapon is an integer instead of a weapon object
-	if typeof(weapon) == TYPE_INT:
-		print("WARNING: Received integer weapon instead of weapon object. Converting...")
-		# If we're in base placement phase, get the base weapon
-		if is_base_placement_phase:
-			weapon = weapon_types.get_base_weapon()
-			print("Using base weapon for placement instead of integer value")
-		# Otherwise try to get weapon by index
-		elif weapon >= 0 and weapon < weapon_types.available_weapons.size():
-			weapon = weapon_types.available_weapons[weapon]
-		else:
-			print("ERROR: Invalid weapon index: ", weapon)
-			return
-	
-	# Handle case where position is a Dictionary instead of Vector2
-	var pos_vector = position
-	if typeof(position) == TYPE_DICTIONARY:
-		print("WARNING: Received Dictionary position instead of Vector2. Converting...")
-		if "x" in position and "y" in position:
-			pos_vector = Vector2(position.x, position.y)
-			print("Converted position dictionary to Vector2:", pos_vector)
-		else:
-			print("ERROR: Position dictionary missing x/y coordinates:", position)
-			return
-	
-	# Check if placement position is within bounds
-	if pos_vector.x < 0 or pos_vector.y < 0 or \
-	   pos_vector.x + weapon.size.x > game_board.grid_size.x or \
-	   pos_vector.y + weapon.size.y > game_board.grid_size.y:
-		print("ERROR: Cannot place weapon at position " + str(pos_vector) + 
-			  " with size " + str(weapon.size) + " - would be out of bounds")
-		return
-	
-	# Mark cells as occupied by this weapon
-	print("WEAPON:", weapon)
-	for x in range(weapon.size.x):
-		for y in range(weapon.size.y):
-			var cell_pos = Vector2(pos_vector.x + x, pos_vector.y + y)
-			
-			# Double-check that we're within bounds before accessing the grid
-			if cell_pos.x >= 0 and cell_pos.x < game_board.grid_size.x and \
-			   cell_pos.y >= 0 and cell_pos.y < game_board.grid_size.y:
-				var cell = game_board.grid[int(cell_pos.x)][int(cell_pos.y)]
-				
-				cell.occupied_by = {
-					"weapon_data": weapon,
-					"player_id": player_id,
-					"root_position": pos_vector,  # Store the root cell position for reference
-					"relative_position": Vector2(x, y)  # Store position relative to root cell
-				}
-			else:
-				print("WARNING: Cell position out of bounds:", cell_pos)
-	
-	# Add visual representation
-	game_board.visual_manager.create_weapon_sprite(weapon.id, pos_vector, player_id)
-	
-	# Signal that a weapon has been placed
-	emit_signal("weapon_placed", player_id, weapon, pos_vector)
-	
-	# Clear the selected weapon if this was during regular placement
-	if !is_base_placement_phase:
-		selected_weapon = null
-
-# Select a weapon for placement
-func select_weapon_for_placement(weapon_id):
-	if !placement_active:
-		print("Weapon placement not active, ignoring selection")
-		return
-	
-	print("Selecting weapon for placement: " + str(weapon_id) + " in phase: " + 
-		  (("BASE" if is_base_placement_phase else "WEAPON")))
-	
-	# Make sure weapon_types is properly initialized
-	if !weapon_types:
-		print("ERROR: weapon_types not initialized in weapon_placement")
-		if Engine.has_singleton("GameManager"):
-			weapon_types = Engine.get_singleton("GameManager").weapon_types
-		if !weapon_types:
-			print("ERROR: Could not get weapon_types from GameManager")
-			return
-	
-	# Handle integer weapon_id differently - it's likely a direct weapon reference, not an index
-	if typeof(weapon_id) == TYPE_INT:
-		print("WARNING: Received integer weapon_id, attempting direct weapon access")
-		# First try to get base weapon during base placement phase
-		if is_base_placement_phase:
-			selected_weapon = weapon_types.get_base_weapon()
-			if selected_weapon:
-				print("Selected base weapon directly with size: ", selected_weapon.size)
-				
-				# Ensure preview is shown for the selected base weapon
-				if weapon_visualization:
-					weapon_visualization.update_preview_size(selected_weapon)
-					weapon_visualization.show_preview(true)
-					print("Base preview created and shown")
-				else:
-					print("ERROR: No weapon_visualization available")
-				
-				return
-		
-		# If not base placement or base not found, try to get by index
-		if weapon_id >= 0 and weapon_id < weapon_types.available_weapons.size():
-			selected_weapon = weapon_types.available_weapons[weapon_id]
-			print("Selected weapon by direct index: ", selected_weapon.id)
-		else:
-			print("ERROR: Invalid weapon index: ", weapon_id)
-		return
-	
-	# Normal string ID based lookup
-	if is_base_placement_phase:
-		# During base placement phase, only allow selecting the base weapon
-		var base_weapon = weapon_types.get_base_weapon()
-		if base_weapon and base_weapon.id == weapon_id:
-			selected_weapon = base_weapon
-			print("Base weapon selected for placement with size: ", base_weapon.size)
-	else:
-		# Regular weapon selection
-		var weapon = weapon_types.get_weapon_by_id(weapon_id)
-		if weapon:
-			print("Selected weapon: ", weapon.id, " with size: ", weapon.size)
-			selected_weapon = weapon
-		else:
-			print("Error: Could not find weapon with id: ", weapon_id)
-
 # Get player ingredients
 func get_player_resources(player_id):
 	# Use player manager's ingredients
-	var GameManager = Engine.get_singleton("GameManager")
-	if GameManager and GameManager.player_manager:
-		return GameManager.player_manager.get_player_ingredients(player_id)
+	var player_manager = get_service("PlayerManager")
+	if player_manager:
+		return player_manager.get_player_ingredients(player_id)
 	
 	# Fallback to previous implementation
 	if player_id < 0 or player_id >= player_resources.size():
@@ -416,21 +472,23 @@ func get_player_resources(player_id):
 
 # Deduct ingredients when placing a weapon
 func deduct_resources(player_id, cost):
-	var GameManager = Engine.get_singleton("GameManager")
-	if GameManager and GameManager.player_manager:
+	var player_manager = get_service("PlayerManager")
+	if player_manager:
 		# Directly modify ingredients in player_manager
-		var current_ingredients = GameManager.player_manager.get_player_ingredients(player_id)
+		var current_ingredients = player_manager.get_player_ingredients(player_id)
 		var new_ingredients = current_ingredients - cost
 		
 		# Update player_manager ingredients
 		if player_id == 0:
-			GameManager.player_manager.player1_ingredients = new_ingredients
+			player_manager.player1_ingredients = new_ingredients
 		else:
-			GameManager.player_manager.player2_ingredients = new_ingredients
+			player_manager.player2_ingredients = new_ingredients
 		
 		# Emit signal for UI update
-		if GameManager.game_state_machine:
-			GameManager.game_state_machine._on_resource_updated(player_id, new_ingredients)
+		emit_event("INGREDIENTS_UPDATED", {
+			"player_id": player_id,
+			"amount": new_ingredients
+		})
 		
 		return new_ingredients
 	
@@ -438,3 +496,21 @@ func deduct_resources(player_id, cost):
 	var new_resources = player_resources[player_id] - cost
 	player_resources[player_id] = new_resources
 	return new_resources
+
+# Helper to get service - use proper service locator pattern
+func get_service(service_name):
+	if Engine.has_singleton("GameManager"):
+		var service = Engine.get_singleton("GameManager").get_service(service_name)
+		# Debug info for phase manager service
+		if service_name == "PhaseManager":
+			print("Getting PhaseManager service: " + ("found" if service != null else "not found") + 
+				  ", NullService: " + str(is_instance_of(service, NullService) if service != null else "N/A"))
+		return service
+	return null
+
+# Helper to emit event
+func emit_event(event_name, event_data = null):
+	if Engine.has_singleton("GameManager"):
+		Engine.get_singleton("GameManager").emit_event(event_name, event_data)
+	else:
+		print("GameManager singleton not available, can't emit event:", event_name)

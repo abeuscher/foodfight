@@ -14,9 +14,60 @@ func ensure_all_services():
 		
 	var game_manager = Engine.get_singleton("GameManager")
 	
-	# Check and fix critical UI services first
+	# Check and fix critical services in proper dependency order
+	# First core services like EventBus, GameBoard, etc.
+	# Then service-dependent systems
+	fix_phase_manager(game_manager)  # Add phase manager first
 	fix_phase_ui_manager(game_manager)
 	fix_base_ui_manager(game_manager)  # Renamed from fix_base_ui_manager
+
+func fix_phase_manager(game_manager):
+	print("ServiceInitializer: Checking PhaseManager...")
+	var phase_manager = game_manager.get_service("PhaseManager")
+	
+	# Check if we have a valid service
+	var is_valid_service = phase_manager != null && 
+						 !(phase_manager is NullService) && 
+						 phase_manager.has_method("base_placement_completed")
+	
+	print("  - PhaseManager found: " + str(phase_manager != null))
+	print("  - Is NullService: " + str(phase_manager is NullService if phase_manager != null else "N/A"))
+	if phase_manager:
+		print("  - Has base_placement_completed method: " + str(phase_manager.has_method("base_placement_completed")))
+	
+	# If we don't have a valid PhaseManager, create one
+	if !is_valid_service:
+		print("  - Creating new PhaseManager...")
+		
+		# Get necessary components for initialization
+		var game_board = game_manager.get_service("GameBoard")
+		var weapon_types = game_manager.get_service("WeaponTypes")
+		var weapon_placement = game_manager.get_service("WeaponPlacement")
+		var targeting_state = game_manager.get_service("TargetingState")
+		var attack_state = game_manager.get_service("AttackState")
+		var ui_manager = game_manager.get_service("BaseUIManager")
+		var player_manager = game_manager.get_service("PlayerManager")
+		
+		# Create a new PhaseManager
+		var new_phase_manager = Node.new()
+		new_phase_manager.name = "PhaseManager"
+		new_phase_manager.set_script(load("res://scripts/states/phase_manager.gd"))
+		add_child(new_phase_manager)
+		
+		# Initialize it
+		new_phase_manager.initialize(
+			game_board,
+			weapon_types,
+			weapon_placement,
+			targeting_state,
+			attack_state,
+			ui_manager,
+			player_manager
+		)
+		
+		# Register the new PhaseManager
+		game_manager.register_service("PhaseManager", new_phase_manager)
+		print("  - New PhaseManager created and registered")
 
 func fix_phase_ui_manager(game_manager):
 	print("ServiceInitializer: Checking PhaseUIManager...")

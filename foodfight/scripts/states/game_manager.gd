@@ -95,6 +95,10 @@ func _on_initialization_failed(stage_name, reason):
 	# Could implement recovery mechanisms here
 
 func _on_all_stages_completed():
+	# Call the new function to ensure all connections are made
+	ensure_component_event_connections()
+	
+	# Then proceed with the original code
 	initialization_complete = true
 	emit_signal("game_initialized")
 	print("All initialization stages completed successfully")
@@ -339,3 +343,38 @@ func get_ai_controller():
 
 func get_game_state_machine():
 	return get_service("GameStateMachine")
+
+func ensure_component_event_connections():
+	print("GameManager: Ensuring component event connections...")
+	
+	# Connect placement state to state changed events
+	var placement_state = get_service("PlacementState")
+	var event_bus = get_service("EventBus")
+	
+	if placement_state and event_bus:
+		print("GameManager: Connecting PlacementState to STATE_CHANGED events")
+		event_bus.subscribe(GameEvents.STATE_CHANGED, placement_state)
+	
+	# Check if weapon_placement is properly set in placement_state
+	if placement_state:
+		var weapon_placement = get_service("WeaponPlacement")
+		if weapon_placement and not placement_state.weapon_placement:
+			print("GameManager: Fixing missing weapon_placement reference in PlacementState")
+			placement_state.weapon_placement = weapon_placement
+	
+	# Check other important connections
+	_ensure_all_essential_connections()
+
+# Add this helper function to verify all important connections
+func _ensure_all_essential_connections():
+	# Check that weapon_placement has game_board reference
+	var weapon_placement = get_service("WeaponPlacement")
+	var game_board = get_service("GameBoard")
+	
+	if weapon_placement and game_board:
+		# Check if weapon_placement has a "game_board" property and it's null
+		if "game_board" in weapon_placement and not weapon_placement.game_board:
+			print("GameManager: Fixing missing game_board reference in WeaponPlacement")
+			weapon_placement.game_board = game_board
+	
+	# Add similar checks for other critical components as needed

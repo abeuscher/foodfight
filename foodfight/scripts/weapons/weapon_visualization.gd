@@ -180,16 +180,12 @@ func update_preview_position(grid_position, is_valid):
 		preview_rect.color = Color(0, 1, 0, 0.3)  # Green for valid
 	else:
 		preview_rect.color = Color(1, 0, 0, 0.3)  # Red for invalid
-	
-	print("Preview updated at", grid_position, "valid:", is_valid, "visible:", preview_rect.visible)
 
 # Show or hide the preview
 func show_preview(visible):
 	if preview_rect:
 		preview_rect.visible = visible
-		print("Preview visibility set to:", visible)
 	else:
-		print("WARNING: No preview rect to show/hide")
 		# Try to create it if we have a selected weapon
 		var weapon_placement = get_parent()
 		if weapon_placement and weapon_placement.selected_weapon:

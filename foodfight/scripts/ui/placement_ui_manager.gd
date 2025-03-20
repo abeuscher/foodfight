@@ -13,6 +13,9 @@ var main_scene
 # Initialization flag
 var is_initialized = false
 
+# Track if buttons have been connected
+var buttons_connected = false
+
 # Initialize with UI elements
 func initialize(p_weapon_buttons_container, p_end_placement_button, p_weapon_placement, p_weapon_types, p_player_manager, p_main_scene):
 	weapon_buttons_container = p_weapon_buttons_container
@@ -24,6 +27,10 @@ func initialize(p_weapon_buttons_container, p_end_placement_button, p_weapon_pla
 	
 	is_initialized = true
 	print("Placement UI Manager initialized")
+	
+	# Connect end placement button signal
+	_connect_end_placement_button()
+	
 	return self
 
 # Update base placement UI
@@ -47,6 +54,15 @@ func update_base_placement_ui(current_state, current_player_index):
 			weapon_buttons_container.visible = false
 		if end_placement_button:
 			end_placement_button.visible = false
+	
+	if end_placement_button:
+		# MISSING VALIDATION: Should check if base is placed before enabling this button
+		end_placement_button.text = "End Base Placement"
+		end_placement_button.visible = true
+		
+		# Connect signal if not already connected
+		if !buttons_connected:
+			_connect_end_placement_button()
 
 # Update weapon placement UI
 func update_weapon_placement_ui(current_state, current_player_index):
@@ -69,6 +85,23 @@ func update_weapon_placement_ui(current_state, current_player_index):
 			weapon_buttons_container.visible = false
 		if end_placement_button:
 			end_placement_button.visible = false
+	
+	# Show the container
+	if weapon_buttons_container and weapon_buttons_container.get_parent():
+		weapon_buttons_container.get_parent().visible = true
+		weapon_buttons_container.visible = true
+	
+	# Update end placement button
+	if end_placement_button:
+		# Check if button signal is connected
+		if !buttons_connected:
+			_connect_end_placement_button()
+		
+		end_placement_button.text = "End Placement"
+		end_placement_button.visible = true
+	
+	# Create weapon buttons
+	_create_weapon_buttons_for_player(current_player_index)
 
 # Create base placement UI
 func create_base_placement_ui(player_id):
@@ -197,3 +230,91 @@ func update_ingredients_display(player_id):
 		weapon_buttons_container.add_child(ingredients_label)
 		
 	ingredients_label.text = "Available Ingredients: " + str(current_ingredients)
+
+# Create weapon buttons for the specified player
+func _create_weapon_buttons_for_player(player_index):
+	print("PlacementUIManager: Creating weapon placement UI for Player " + str(player_index + 1))
+	
+	# Ensure dependencies are available
+	if !weapon_types or !weapon_buttons_container:
+		push_error("Cannot create weapon buttons: missing dependencies")
+		return
+	
+	# Clear existing buttons
+	for child in weapon_buttons_container.get_children():
+		child.queue_free()
+	
+	# Get weapons for the player
+	var weapons = weapon_types.get_weapons_for_player(player_index)
+	if weapons.size() == 0:
+		print("No weapons available for player " + str(player_index + 1))
+		return
+	
+	# Filter out base weapons for regular placement phase
+	var placement_weapons = []
+	for weapon in weapons:
+		if weapon.type != "base":
+			placement_weapons.append(weapon)
+	
+	print("Found " + str(placement_weapons.size()) + " weapons for placement")
+
+# Connect the end placement button signal
+func _connect_end_placement_button():
+	if end_placement_button:
+		# Disconnect any existing connections to avoid duplicates
+		if end_placement_button.pressed.is_connected(Callable(self, "_on_end_placement_pressed")):
+			end_placement_button.pressed.disconnect(Callable(self, "_on_end_placement_pressed"))
+		
+		# Connect the signal
+		end_placement_button.pressed.connect(Callable(self, "_on_end_placement_pressed"))
+		buttons_connected = true
+
+# Handler for end placement button
+func _on_end_placement_pressed():
+	print("End placement button pressed")
+	
+	if !weapon_placement:
+		push_error("Cannot end placement: weapon_placement is null")
+		return
+	
+	# Check if we're in base placement phase
+	var is_base_phase = false
+	var phase_manager = get_service("PhaseManager")
+	if phase_manager and "Phase" in phase_manager and "current_phase" in phase_manager:
+		is_base_phase = (phase_manager.current_phase == phase_manager.Phase.BASE_PLACEMENT)
+	else:
+		# Fallback to game state machine
+		var game_state_machine = get_service("GameStateMachine")
+		if game_state_machine and "GameState" in game_state_machine and "current_state" in game_state_machine:
+			is_base_phase = (game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT)
+	
+	# If in base placement phase, validate that base has been placed
+	if is_base_phase:
+		var current_player = 0
+		if player_manager and "current_player_index" in player_manager:
+			current_player = player_manager.current_player_index
+			
+		if !weapon_placement.base_placement_complete[current_player]:
+			# Base not placed - show warning and don't end the phase
+			print("Cannot end base placement - no base has been placed!")
+			
+			# Create a popup to inform the player
+			var popup = AcceptDialog.new()
+			popup.title = "Base Required"
+			popup.dialog_text = "You must place a base before ending this phase."
+			main_scene.add_child(popup)
+			popup.popup_centered()
+			
+			# Remove popup after it's closed
+			popup.confirmed.connect(func(): popup.queue_free())
+			
+			return
+	
+	# Everything validated - end the placement phase
+	weapon_placement.end_placement_phase()
+
+# Helper method to get a service
+func get_service(service_name):
+	if Engine.has_singleton("GameManager"):
+		return Engine.get_singleton("GameManager").get_service(service_name)
+	return null

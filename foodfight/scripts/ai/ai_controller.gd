@@ -10,7 +10,7 @@ var ai_initialized = false
 # References to game components
 var ai_opponent
 var ui_manager
-var ai_ui_manager  # Direct reference to AI UI Manager
+var ai_ui_manager # Direct reference to AI UI Manager
 var game_state_machine
 var player_manager
 
@@ -59,16 +59,6 @@ func is_ai_turn():
 
 # Process AI turn if needed
 func process_ai_turn_if_needed():
-	if !ai_initialized:
-		print("AI controller not initialized!")
-		return false
-		
-	if !is_ai_turn():
-		print("Not AI's turn according to player manager")
-		return false
-		
-	print("AI turn detected, processing actions for current state: " + str(game_state_machine.GameState.keys()[game_state_machine.current_state]))
-	
 	# Handle different states
 	match game_state_machine.current_state:
 		game_state_machine.GameState.BASE_PLACEMENT:
@@ -166,10 +156,6 @@ func _on_base_placement_completed():
 
 # Handle AI weapon placement
 func handle_weapon_placement():
-	if ai_turn_in_progress:
-		print("AI turn already in progress, not starting weapon placement")
-		return
-	
 	print("Starting AI weapon placement")
 	ai_turn_in_progress = true
 	emit_signal("ai_action_started")
@@ -186,7 +172,7 @@ func handle_weapon_placement():
 	
 	# Start AI weapon placement with error handling
 	print("Calling ai_opponent.perform_weapon_placement()")
-	var placement_result = ai_opponent.perform_weapon_placement()
+	var placement_result = await ai_opponent.perform_weapon_placement()
 	
 	# Safety check - if perform_weapon_placement fails, force completion after timeout
 	if !placement_result:
