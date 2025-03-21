@@ -347,10 +347,46 @@ func _initialize_weapon_placement(player_index):
 
 # Initialize targeting phase
 func _initialize_targeting(player_index):
+	# Check if targeting_state exists and has the required method
 	if targeting_state:
-		targeting_state.start_targeting(player_index)
+		print("PhaseManager: Initializing targeting for player " + str(player_index) +
+			  " (" + player_manager.get_player_name(player_index) + ")")
+		
+		# Verify targeting_state has the correct method
+		if targeting_state.has_method("start_targeting"):
+			targeting_state.start_targeting(player_index)
+		elif targeting_state.has_method("start_targeting_phase"):
+			# Fallback to old method name if available
+			print("PhaseManager: Using fallback method start_targeting_phase")
+			targeting_state.start_targeting_phase(player_index)
+		else:
+			# Emergency direct initialization of targeting state
+			print("PhaseManager: EMERGENCY - targeting_state missing required methods!")
+			targeting_state.current_player_id = player_index
+			targeting_state.is_targeting_active = true
+			
+			# Clear any previous data
+			if "selected_weapon" in targeting_state:
+				targeting_state.selected_weapon = null
+			if "selected_weapons" in targeting_state:
+				targeting_state.selected_weapons = []
+			if "targets" in targeting_state:
+				targeting_state.targets = []
+				
+			# Try emitting signals if they exist
+			if targeting_state.has_signal("player_turn_started"):
+				targeting_state.emit_signal("player_turn_started", player_index)
 	else:
 		push_error("PhaseManager ERROR: Cannot initialize targeting - targeting_state is null")
+		
+		# Try to recover by getting targeting_state from GameManager
+		var recovered_targeting_state = get_service("TargetingState")
+		if recovered_targeting_state:
+			print("PhaseManager: Recovered targeting_state from GameManager")
+			targeting_state = recovered_targeting_state
+			_initialize_targeting(player_index) # Try again with recovered state
+		else:
+			print("PhaseManager: CRITICAL - Could not recover targeting_state!")
 
 # Initialize attack resolution phase
 func _initialize_attack_resolution():
@@ -507,7 +543,7 @@ func _on_weapon_placed(player_id, weapon_data, position):
 			"all_players_complete": player_id == 1
 		})
 
-# Process AI turn if current player is AI
+# Process AI turn with proper blocking
 func _process_ai_turn():
 	if _active_method_calls.get("_process_ai_turn", false):
 		print("PhaseManager: Recursive call to _process_ai_turn detected and blocked")
@@ -515,103 +551,80 @@ func _process_ai_turn():
 	
 	_active_method_calls["_process_ai_turn"] = true
 	
-	# DEBUG: Extra check to see if AI turns are being properly detected
-	print("PhaseManager: _process_ai_turn called - player_index=" + str(player_manager.current_player_index) +
-		  ", is_ai=" + str(player_manager.is_current_player_ai()))
+	# DEBUG OUTPUT
+	print("PhaseManager: _process_ai_turn called - player_index=" + str(player_manager.current_player_index))
+	print("PhaseManager: Current phase is " + str(current_phase) + " (" + get_phase_display_name(current_phase) + ")")
 	
+	# If not AI's turn, exit immediately
 	if !player_manager.is_current_player_ai():
 		print("PhaseManager: Not AI turn - current player is " + player_manager.get_current_player_name())
 		_active_method_calls["_process_ai_turn"] = false
 		return false
 	
-	if ai_action_in_progress:
-		print("PhaseManager: AI action already in progress, skipping")
-		_active_method_calls["_process_ai_turn"] = false
-		return false
-	
-	# Set global waiting state AND track which player's AI is processing
+	# Set waiting state
 	game_waiting_for_ai = true
 	ai_action_in_progress = true
 	current_ai_action_player = player_manager.current_player_index
-	print("PhaseManager: Starting AI action for phase: " + str(current_phase) +
-		  " - " + get_phase_display_name(current_phase) +
-		  " for player " + str(current_ai_action_player))
 	
-	# Block all input while AI is thinking by setting global waiting flag
+	# Force current phase to BASE_PLACEMENT if we're in base placement
+	if get_phase_display_name(current_phase).find("Base") >= 0:
+		print("PhaseManager: Forcing current_phase to BASE_PLACEMENT for consistent enum values")
+		current_phase = Phase.BASE_PLACEMENT
+	
+	# Block all events during AI turn
+	var event_bus = get_service("EventBus")
+	if event_bus and event_bus.has_method("enter_blocking_mode"):
+		event_bus.enter_blocking_mode()
+	
+	# Show UI feedback
 	emit_event("GAME_WAITING_STATE_CHANGED", {"waiting": true, "reason": "ai_thinking"})
-	
-	# Get the AI controller using service locator
-	var ai_controller = get_service("AIController")
-	if !ai_controller:
-		print("PhaseManager: CRITICAL - AIController service not found!")
-		
-		# Debug registered services
-		if Engine.has_singleton("GameManager"):
-			var gm = Engine.get_singleton("GameManager")
-			print("PhaseManager: Registered services: " + str(gm.services.keys()))
-	
-	# Signal that AI is thinking (for UI)
 	emit_event("AI_THINKING_STARTED")
 	
-	# Ensure this is long enough to be visible
-	var timer = get_tree().create_timer(0.5)
-	await timer.timeout
-	
-	# Special handling for weapon placement phase - it's often problematic
-	if current_phase == Phase.WEAPON_PLACEMENT:
-		print("PhaseManager: Weapon Placement phase detected for AI - ensuring proper setup")
-		_initialize_weapon_placement(player_manager.current_player_index)
-	
-	var ai_processed = false
-	
-	# Try AI controller first if available
+	# Process AI turn
+	var ai_controller = get_service("AIController")
 	if ai_controller:
-		print("PhaseManager: Using AIController to process turn")
-		# Process AI turn with timeout safety
-		ai_processed = ai_controller.process_ai_turn_if_needed()
-		print("PhaseManager: AI controller returned: " + str(ai_processed))
-	else:
-		print("PhaseManager: AIController service not found, using fallback")
-		# Try fallback approach immediately
-		_handle_ai_fallback()
-		ai_processed = true
-		print("PhaseManager: Using fallback AI handling")
-	
-	# If AI processing failed after fallback, complete the phase anyway
-	if !ai_processed:
-		print("PhaseManager: AI processing failed, forcing completion after delay")
+		print("PhaseManager: Using AIController to process turn with callback")
 		
-		# Force completion based on current phase
-		match current_phase:
-			Phase.BASE_PLACEMENT:
-				print("PhaseManager: Forcing base_placement_completed for player " + str(player_manager.current_player_index))
-				get_tree().create_timer(1.0).timeout.connect(func():
-					base_placement_completed(player_manager.current_player_index)
-				)
-				
-			Phase.WEAPON_PLACEMENT:
-				print("PhaseManager: Forcing weapon_placement_completed for player " + str(player_manager.current_player_index))
-				get_tree().create_timer(1.0).timeout.connect(func():
-					weapon_placement_completed(player_manager.current_player_index)
-				)
-				
-			Phase.TARGETING:
-				print("PhaseManager: Forcing targeting_completed for player " + str(player_manager.current_player_index))
-				get_tree().create_timer(1.0).timeout.connect(func():
-					targeting_completed(player_manager.current_player_index)
-				)
+		# VERIFY the AIController has our critical methods
+		if !ai_controller.has_method("process_ai_turn_with_callback"):
+			print("PhaseManager: AIController MISSING process_ai_turn_with_callback method!")
+			_active_method_calls["_process_ai_turn"] = false
+			_on_ai_turn_completed()
+			return false
+			
+		# Use callback approach 
+		ai_controller.process_ai_turn_with_callback(func():
+			# This code runs AFTER AI completes its turn
+			print("PhaseManager: AI turn completion callback triggered")
+			_on_ai_turn_completed()
+		)
+	else:
+		# Fallback
+		print("PhaseManager: No AIController found, using fallback")
+		_handle_ai_fallback()
+		# Still need to complete
+		_on_ai_turn_completed()
 	
-	# Signal completion
-	emit_event("AI_THINKING_COMPLETED")
+	_active_method_calls["_process_ai_turn"] = false
+	return true
+
+# New callback method when AI completes its turn
+func _on_ai_turn_completed():
+	print("PhaseManager: AI turn completed callback")
 	
-	# Before returning, clear the waiting state AND player tracking
+	# Unblock events
+	var event_bus = get_service("EventBus")
+	if event_bus and event_bus.has_method("exit_blocking_mode"):
+		event_bus.exit_blocking_mode()
+	
+	# Reset waiting state
 	game_waiting_for_ai = false
 	ai_action_in_progress = false
 	current_ai_action_player = -1
-	emit_event("GAME_WAITING_STATE_CHANGED", {"waiting": false})
-	_active_method_calls["_process_ai_turn"] = false
 	
-	return ai_processed
+	# Signal completion
+	emit_event("AI_THINKING_COMPLETED")
+	emit_event("GAME_WAITING_STATE_CHANGED", {"waiting": false})
 
 # Handle AI fallback for various phases
 func _handle_ai_fallback():

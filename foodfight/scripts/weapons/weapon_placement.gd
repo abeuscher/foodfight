@@ -248,6 +248,31 @@ func attempt_base_placement(global_pos):
 
 # Place a weapon on the game board
 func place_weapon(weapon, position, player_id):
+	# Handle case where weapon is a string ID instead of a weapon object
+	if typeof(weapon) == TYPE_STRING:
+		print("WARNING: Received string weapon ID '" + str(weapon) + "' instead of weapon object. Converting...")
+		# Look up the weapon by ID
+		if weapon_types:
+			var found_weapon = weapon_types.get_weapon_by_id(weapon)
+			if found_weapon:
+				weapon = found_weapon
+				print("Converted string ID to weapon object: " + weapon.name)
+			else:
+				# Fall back to base weapon during base placement phase
+				if is_base_placement_phase:
+					weapon = weapon_types.get_base_weapon()
+					if weapon:
+						print("Using base weapon as fallback for string ID")
+					else:
+						print("ERROR: Could not find base weapon as fallback")
+						return
+				else:
+					print("ERROR: Could not find weapon with ID: " + str(weapon))
+					return
+		else:
+			print("ERROR: weapon_types is null, cannot convert weapon ID: " + str(weapon))
+			return
+
 	# Handle case where weapon is an integer instead of a weapon object
 	if (typeof(weapon) == TYPE_INT):
 		print("WARNING: Received integer weapon instead of weapon object. Converting...")

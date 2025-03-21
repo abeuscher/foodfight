@@ -113,9 +113,17 @@ func _input(event):
 	# Check if game is waiting for AI before handling input
 	var phase_manager = get_service("PhaseManager")
 	if phase_manager and phase_manager.is_game_waiting():
-		# Block all input while waiting
+		 # Show visual feedback that input is blocked
+		if ai_thinking_indicator and !ai_thinking_indicator.visible:
+			ai_thinking_indicator.visible = true
+		
+		# Block ALL input while waiting
 		get_viewport().set_input_as_handled()
 		return
+	
+	# Hide visual feedback when input is not blocked
+	if ai_thinking_indicator and ai_thinking_indicator.visible:
+		ai_thinking_indicator.visible = false
 	
 	var game_state_machine = GameManager.game_state_machine
 	if !game_state_machine or !game_state_machine.is_initialized:

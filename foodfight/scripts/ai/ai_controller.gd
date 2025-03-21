@@ -21,11 +21,18 @@ var player_manager
 # AI action types
 enum AIAction {BASE_PLACEMENT, WEAPON_PLACEMENT, TARGETING}
 
-func initialize(p_ai_opponent, p_ui_manager, p_phase_manager, p_player_manager):
+func initialize(p_ai_opponent, p_ui_manager, p_game_state_machine, p_player_manager):
 	print("AIController: Initializing...")
 	ai_opponent = p_ai_opponent
 	ui_manager = p_ui_manager
-	phase_manager = p_phase_manager
+	
+	# Change: store game_state_machine and get the proper PhaseManager
+	var game_state_machine = p_game_state_machine
+	# Get the actual PhaseManager from the service registry
+	phase_manager = get_service("PhaseManager")
+	if !phase_manager:
+		push_error("AIController: Failed to get PhaseManager service")
+	
 	player_manager = p_player_manager
 	
 	# Try to get a direct reference to the ai_ui_manager
@@ -250,3 +257,168 @@ func _start_ai_base_placement():
 	
 func _start_ai_weapon_placement():
 	handle_weapon_placement()
+
+# New method that takes a completion callback
+func process_ai_turn_with_callback(completion_callback):
+	print("AIController: process_ai_turn_with_callback called")
+	
+	# ALWAYS get a fresh reference to PhaseManager
+	phase_manager = get_service("PhaseManager")
+	
+	if !phase_manager:
+		print("AIController: CRITICAL ERROR - Cannot get PhaseManager service!")
+		completion_callback.call() # Still call callback to unblock
+		return false
+		
+	print("AIController: Current phase from phase_manager: " + str(phase_manager.current_phase)
+		  +" (" + (str(Phase.keys()[phase_manager.current_phase]) if phase_manager.current_phase < len(Phase.keys()) else "UNKNOWN") + ")")
+	
+	# Debug phase enumeration
+	print("AIController: BASE_PLACEMENT = " + str(Phase.BASE_PLACEMENT))
+	
+	if !player_manager:
+		print("AIController: No player manager available!")
+		completion_callback.call() # Still call callback to unblock
+		return false
+	
+	if !player_manager.is_current_player_ai():
+		print("AIController: Not AI's turn - player index: " + str(player_manager.current_player_index))
+		completion_callback.call() # Still call callback to unblock
+		return false
+	
+	if ai_turn_in_progress:
+		print("AIController: AI turn already in progress")
+		completion_callback.call() # Still call callback to unblock
+		return true
+	
+	# Start AI processing
+	ai_turn_in_progress = true
+	_show_ai_thinking()
+	
+	print("AIController: Processing AI turn for phase " + str(phase_manager.current_phase))
+	
+	# CRITICAL FIX: Handle base placement explicitly for phase 2
+	if phase_manager.current_phase == 2: # BASE_PLACEMENT
+		print("AIController: Explicit handler for BASE_PLACEMENT (phase 2)")
+		_handle_base_placement_with_callback(completion_callback)
+		return true
+	
+	# Regular phase handling
+	match phase_manager.current_phase:
+		Phase.BASE_PLACEMENT:
+			print("AIController: Handling BASE_PLACEMENT via enum match")
+			_handle_base_placement_with_callback(completion_callback)
+		Phase.WEAPON_PLACEMENT:
+			_handle_weapon_placement_with_callback(completion_callback)
+		Phase.TARGETING:
+			_handle_targeting_with_callback(completion_callback)
+		_:
+			print("AIController: No matching phase handler for phase " + str(phase_manager.current_phase))
+			ai_turn_in_progress = false
+			_hide_ai_thinking()
+			completion_callback.call() # Must call callback to unblock game
+	
+	return true
+	
+# Phase-specific methods with callbacks
+func _handle_base_placement_with_callback(completion_callback):
+	print("AIController: Starting base placement with callback")
+	
+	if !ai_opponent:
+		print("AIController: No AI opponent available!")
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		completion_callback.call()
+		return
+		
+	# Run AI base placement with timeout to ensure completion
+	print("AIController: Calling AI opponent perform_base_placement()")
+	var placement_result = ai_opponent.perform_base_placement()
+	
+	# Complete after a short delay
+	get_tree().create_timer(1.0).timeout.connect(func():
+		# Complete the phase
+		print("AIController: Base placement timer completed")
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		
+		var player_idx = player_manager.current_player_index
+		# Directly tell phase manager the action is complete
+		if phase_manager:
+			print("AIController: Telling phase_manager base_placement_completed for player " + str(player_idx))
+			phase_manager.base_placement_completed(player_idx)
+		else:
+			print("AIController: NO PHASE MANAGER to tell base_placement_completed!")
+			
+		# Call the callback to unblock the game
+		print("AIController: Calling completion callback")
+		completion_callback.call()
+	)
+
+# Add similar methods for other phases
+func _handle_weapon_placement_with_callback(completion_callback):
+	if !ai_opponent:
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		completion_callback.call()
+		return
+	
+	# Create wrapper function to handle the async operation without requiring await
+	_start_weapon_placement(func():
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		
+		var player_idx = player_manager.current_player_index
+		if phase_manager:
+			phase_manager.weapon_placement_completed(player_idx)
+			
+		completion_callback.call()
+	)
+
+# Helper function to handle the async operation
+func _start_weapon_placement(on_complete_callback):
+	# Start AI weapon placement and connect it to a one-shot completion function
+	if ai_opponent and ai_opponent.has_method("perform_weapon_placement"):
+		# Connect to AI's action_taken signal as a oneshot for weapon placement completion
+		if !ai_opponent.is_connected("action_taken", Callable(self, "_on_weapon_placement_complete")):
+			ai_opponent.action_taken.connect(_on_weapon_placement_complete, CONNECT_ONE_SHOT)
+		
+		# Store the callback for later use
+		_weapon_placement_callback = on_complete_callback
+		
+		# Start the weapon placement - don't try to get or await the result
+		ai_opponent.perform_weapon_placement()
+	else:
+		# If AI opponent doesn't have the method, call the callback directly
+		on_complete_callback.call()
+
+# Callback variable - needs to be a class property
+var _weapon_placement_callback = null
+
+# Signal handler for weapon placement completion
+func _on_weapon_placement_complete(action_type):
+	if action_type == "weapon_placement" and _weapon_placement_callback != null:
+		# Call the stored callback and clear it
+		var callback = _weapon_placement_callback
+		_weapon_placement_callback = null
+		callback.call()
+
+func _handle_targeting_with_callback(completion_callback):
+	if !ai_opponent:
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		completion_callback.call()
+		return
+		
+	var targeting_result = ai_opponent.perform_targeting()
+	
+	get_tree().create_timer(0.5).timeout.connect(func():
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		
+		var player_idx = player_manager.current_player_index
+		if phase_manager:
+			phase_manager.targeting_completed(player_idx)
+			
+		completion_callback.call()
+	)

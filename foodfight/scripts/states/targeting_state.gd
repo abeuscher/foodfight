@@ -27,7 +27,8 @@ func initialize(p_game_board, p_weapon_manager, p_targeting_manager):
 	return true
 
 # Start targeting for a player - update to use events
-func start_targeting_phase(player_id):
+# Renamed from start_targeting_phase to start_targeting to match PhaseManager's expectations
+func start_targeting(player_id):
 	current_player_id = player_id
 	is_targeting_active = true
 	
@@ -45,6 +46,10 @@ func start_targeting_phase(player_id):
 		game_manager.emit_event(GameEvents.TARGETING_STARTED, {"player_index": player_id})
 	
 	return true
+
+# For backward compatibility - redirect old function name to new function
+func start_targeting_phase(player_id):
+	return start_targeting(player_id)
 
 # Handle input during targeting
 func handle_input(event):

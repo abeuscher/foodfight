@@ -8,11 +8,40 @@ var subscribers = {}
 # Verbose debug mode
 var verbose_debug = false
 
+# Blocking mode properties
+var blocking_mode_active = false
+var queued_events = []
+var allowed_events_during_blocking = ["AI_THINKING_COMPLETED", "AI_ACTION_COMPLETED"]
+
+# Enter blocking mode - queue events instead of processing them
+func enter_blocking_mode():
+	print("EventBus: Entering blocking mode - events will be queued")
+	blocking_mode_active = true
+	
+# Exit blocking mode and process any queued events
+func exit_blocking_mode():
+	print("EventBus: Exiting blocking mode - processing queued events")
+	blocking_mode_active = false
+	
+	# Process queued events
+	var events_to_process = queued_events.duplicate()
+	queued_events.clear()
+	
+	for event in events_to_process:
+		emit_event(event.name, event.data)
+
 # Emit an event to all subscribers
 func emit_event(event_name: String, event_data = null) -> void:
 	# Ensure event_name is a string (handle constants)
 	if typeof(event_name) != TYPE_STRING:
 		event_name = str(event_name)
+	
+	# Handle blocking mode - queue events instead of processing them
+	if blocking_mode_active and not event_name in allowed_events_during_blocking:
+		if verbose_debug:
+			print("EventBus: Event " + event_name + " queued (blocking mode active)")
+		queued_events.append({"name": event_name, "data": event_data})
+		return
 		
 	if verbose_debug:
 		print("EventBus: Emitting event: " + event_name)
@@ -28,7 +57,7 @@ func emit_event(event_name: String, event_data = null) -> void:
 	for subscriber in current_subscribers:
 		# Check if subscriber is still valid
 		if is_instance_valid(subscriber):
-			 # Try both conventions: on_EVENT_NAME (exact case) and on_event_name (lowercase)
+			# Try both conventions: on_EVENT_NAME (exact case) and on_event_name (lowercase)
 			var handler_name_exact = "on_" + event_name
 			var handler_name_lower = "on_" + event_name.to_lower()
 			

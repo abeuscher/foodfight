@@ -467,3 +467,19 @@ func _ensure_all_essential_connections():
 			weapon_placement.game_board = game_board
 	
 	# Add similar checks for other critical components as needed
+
+# Make sure to explicitly register TargetingState during initialization
+func register_core_services():
+	# Ensure TargetingState is correctly registered
+	print("GameManager: Double-checking TargetingState registration")
+	var targeting_state = get_service("TargetingState")
+	if targeting_state and targeting_state.has_method("start_targeting"):
+		print("GameManager: TargetingState properly registered with correct methods")
+	else:
+		print("GameManager: TargetingState missing or has incorrect methods, re-registering")
+		# Try to find targeting_state in the scene
+		var found_targeting_state = get_node_or_null("/root/Main/TargetingState")
+		if found_targeting_state:
+			register_service("TargetingState", found_targeting_state)
+		else:
+			print("GameManager: WARNING - Could not find TargetingState in scene tree")

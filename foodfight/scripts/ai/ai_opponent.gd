@@ -90,11 +90,11 @@ func perform_base_placement():
 	
 	return true
 
-# Perform weapon placement - updated to use events
+# Perform weapon placement - updated to use callbacks instead of await
 func perform_weapon_placement():
 	print("AI performing weapon placement...")
 	
-	# Emit thinking started event and also keep the signal for backward compatibility
+	# Emit thinking started event
 	if Engine.has_singleton("GameManager"):
 		var game_manager = Engine.get_singleton("GameManager")
 		game_manager.emit_event(GameEvents.AI_THINKING_STARTED)
@@ -102,11 +102,15 @@ func perform_weapon_placement():
 	
 	current_state = AIState.THINKING
 	
-	# Simulate thinking with a small timer for better UX
+	# Use a timer callback instead of await
 	var thinking_timer = get_tree().create_timer(1.5)
-	await thinking_timer.timeout
+	thinking_timer.timeout.connect(_place_weapons_after_thinking)
 	
-	# Place weapons immediately - no delay
+	return true # Return immediately, signal will be emitted later
+
+# Method to run after thinking timer completes
+func _place_weapons_after_thinking():
+	# Place weapons immediately
 	var resources_remaining = weapon_placement.get_player_resources(player_id)
 	print("AI has " + str(resources_remaining) + " resources for weapons")
 	
@@ -141,19 +145,17 @@ func perform_weapon_placement():
 	current_state = AIState.IDLE
 	print("AI weapon placement complete")
 	
-	# Emit thinking completed event and also keep the signal for backward compatibility
+	# Emit thinking completed event
 	if Engine.has_singleton("GameManager"):
 		var game_manager = Engine.get_singleton("GameManager")
 		game_manager.emit_event(GameEvents.AI_THINKING_COMPLETED)
 	emit_signal("thinking_completed")
 	
-	# Emit AI move executed event
+	# Emit action taken event
 	if Engine.has_singleton("GameManager"):
 		var game_manager = Engine.get_singleton("GameManager")
 		game_manager.emit_event(GameEvents.AI_MOVE_EXECUTED, {"action_type": "weapon_placement"})
 	emit_signal("action_taken", "weapon_placement")
-	
-	return true
 
 # Perform targeting - updated to use events
 func perform_targeting():
