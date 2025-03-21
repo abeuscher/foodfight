@@ -7,12 +7,16 @@ var preview_rect = null
 
 # Initialization flag
 var is_initialized = false
-var default_cell_size = Vector2(32, 32)  # Fallback cell size if game_board is null
+var default_cell_size = Vector2(32, 32) # Fallback cell size if game_board is null
 
 # Preview state tracking
 var current_grid_position = null
 var current_valid_state = false
-var preview_creation_count = 0  # Track how many times we're creating previews for debugging
+var preview_creation_count = 0 # Track how many times we're creating previews for debugging
+
+# Add this property
+var show_placement_preview = true
+var current_preview = null
 
 func _ready():
 	# Set up a timer to check periodically if we need to create the preview
@@ -23,6 +27,11 @@ func _ready():
 	timer.timeout.connect(_check_preview_needed)
 	add_child(timer)
 	timer.start()
+
+func _process(delta):
+	# Update preview position on mouse move
+	if show_placement_preview and is_placement_active():
+		update_placement_preview()
 
 func initialize(p_game_board, p_visual_manager):
 	print("Initializing weapon visualization with game_board:", p_game_board)
@@ -78,7 +87,7 @@ func _ensure_game_board():
 func _get_cell_size():
 	if game_board and "cell_size" in game_board:
 		return game_board.cell_size
-	return default_cell_size  # Fallback
+	return default_cell_size # Fallback
 
 # Update the size of the preview based on weapon data
 func update_preview_size(weapon_data):
@@ -117,8 +126,8 @@ func update_preview_size(weapon_data):
 		weapon_data.size.x * cell_size.x,
 		weapon_data.size.y * cell_size.y
 	)
-	preview_rect.modulate.a = 0.5  # 50% transparency
-	preview_rect.color = Color(0, 1, 0, 0.3)  # Default to green
+	preview_rect.modulate.a = 0.5 # 50% transparency
+	preview_rect.color = Color(0, 1, 0, 0.3) # Default to green
 	
 	# Add to scene tree (try game_board first, then fallback to parent)
 	var added_to_scene = false
@@ -133,7 +142,7 @@ func update_preview_size(weapon_data):
 	
 	if added_to_scene:
 		# Make it visible by default
-		preview_rect.z_index = 100  # Make sure it's on top of everything
+		preview_rect.z_index = 100 # Make sure it's on top of everything
 		preview_rect.visible = true
 		print("Preview created and is visible")
 	else:
@@ -173,13 +182,13 @@ func update_preview_position(grid_position, is_valid):
 	
 	# Update position
 	preview_rect.position = world_pos
-	preview_rect.visible = true  # Ensure visibility
+	preview_rect.visible = true # Ensure visibility
 	
 	# Update color based on validity
 	if is_valid:
-		preview_rect.color = Color(0, 1, 0, 0.3)  # Green for valid
+		preview_rect.color = Color(0, 1, 0, 0.3) # Green for valid
 	else:
-		preview_rect.color = Color(1, 0, 0, 0.3)  # Red for invalid
+		preview_rect.color = Color(1, 0, 0, 0.3) # Red for invalid
 
 # Show or hide the preview
 func show_preview(visible):
@@ -212,14 +221,58 @@ func place_weapon_visual(weapon_data, grid_position, player_id):
 		print("ERROR: No visual_manager to create weapon sprite")
 		return null
 	
-# Update placement preview with weapon data and position
-func update_placement_preview(weapon_data, grid_position, is_valid):
-	# Update size first (will be skipped if size hasn't changed)
-	update_preview_size(weapon_data)
+# A single, simple update_placement_preview function
+func update_placement_preview(params = null):
+	var parent = get_parent()
+	if !parent:
+		return
 	
-	# Then update position and visibility
-	update_preview_position(grid_position, is_valid)
+	var mouse_pos = get_viewport().get_mouse_position()
+	if params is Vector2:
+		mouse_pos = params
+	
+	# Get grid position from mouse
+	var grid_pos = null
+	var cell = parent.game_board.get_cell_at_position(mouse_pos)
+	if cell:
+		grid_pos = cell.position
+	else:
+		return
+	
+	# Get weapon data
+	var weapon_data = null
+	if parent.is_base_placement_phase:
+		weapon_data = parent.weapon_types.get_weapon_by_type("base")
+	else:
+		weapon_data = parent.selected_weapon
+		
+	if !weapon_data:
+		return
+		
+	# Check placement validity
+	var is_valid = parent.can_place_at_position(weapon_data, grid_pos, parent.current_player_id)
+	
+	# Update preview
+	update_preview_size(weapon_data)
+	update_preview_position(grid_pos, is_valid)
 
 # Clear the placement preview
 func clear_placement_preview():
 	clear_preview()
+
+# Helper to check if placement is active
+func is_placement_active():
+	return get_parent().placement_active
+
+# Helper to get current weapon data
+func get_current_weapon_data():
+	var parent = get_parent()
+	
+	if parent.is_base_placement_phase:
+		# In base placement, get base weapon data
+		return parent.weapon_types.get_weapon_by_type("base")
+	elif parent.selected_weapon_id:
+		# In weapon placement, get selected weapon
+		return parent.weapon_types.get_weapon_by_id(parent.selected_weapon_id)
+	
+	return null

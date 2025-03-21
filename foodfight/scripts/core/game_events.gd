@@ -58,6 +58,14 @@ const ERROR_OCCURRED = "error_occurred"
 const WARNING_OCCURRED = "warning_occurred"
 const DEBUG_MESSAGE = "debug_message"
 
+# New events
+const PHASE_ACTION_COMPLETED = "phase_action_completed" # Player completed phase action
+const NEXT_PLAYER_TURN = "next_player_turn" # Signal next player's turn
+const PLAYER_TURN_STARTED = "player_turn_started" # Player turn has started
+
+# System waiting state
+const GAME_WAITING_STATE_CHANGED = "game_waiting_state_changed" # System is waiting (e.g., for AI or animation)
+
 # Get all event constants defined in this class
 static func get_all_events() -> Array:
 	var events = []
@@ -106,7 +114,11 @@ static func get_all_events() -> Array:
 		"AI_MOVE_EXECUTED": AI_MOVE_EXECUTED,
 		"ERROR_OCCURRED": ERROR_OCCURRED,
 		"WARNING_OCCURRED": WARNING_OCCURRED,
-		"DEBUG_MESSAGE": DEBUG_MESSAGE
+		"DEBUG_MESSAGE": DEBUG_MESSAGE,
+		"PHASE_ACTION_COMPLETED": PHASE_ACTION_COMPLETED,
+		"NEXT_PLAYER_TURN": NEXT_PLAYER_TURN,
+		"PLAYER_TURN_STARTED": PLAYER_TURN_STARTED,
+		"GAME_WAITING_STATE_CHANGED": GAME_WAITING_STATE_CHANGED
 	}
 	
 	# Add all the values to our events array

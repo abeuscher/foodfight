@@ -8,10 +8,10 @@ signal thinking_completed
 signal action_taken(action_type)
 
 # Difficulty levels
-enum Difficulty { EASY, MEDIUM, HARD }
+enum Difficulty {EASY, MEDIUM, HARD}
 
 # AI states
-enum AIState { IDLE, THINKING, ACTING }
+enum AIState {IDLE, THINKING, ACTING}
 
 # References to game components
 var game_board
@@ -23,9 +23,9 @@ var targeting_manager
 # AI properties
 var difficulty = Difficulty.MEDIUM
 var current_state = AIState.IDLE
-var player_id = 1  # AI is typically player 2
-var thinking_time_min = 1.0  # Increased minimum time to make it more visible
-var thinking_time_max = 2.5  # Increased maximum time to make it more visible
+var player_id = 1 # AI is typically player 2
+var thinking_time_min = 1.0 # Increased minimum time to make it more visible
+var thinking_time_max = 2.5 # Increased maximum time to make it more visible
 var thinking_indicator_visible = false
 
 # Initialize the AI with game references
@@ -69,7 +69,12 @@ func perform_base_placement():
 	# Place base immediately - no delay
 	var base_placement_position = _determine_base_position()
 	print("AI decided to place base at: ", base_placement_position)
-	_place_base(base_placement_position)
+	
+	if base_placement_position:
+		_place_base(base_placement_position)
+		print("AI base placement executed successfully")
+	else:
+		print("AI could not find valid base position! Emergency fallback needed")
 	
 	# Complete the process
 	current_state = AIState.IDLE
@@ -110,12 +115,12 @@ func perform_weapon_placement():
 		var weapon_choice = _select_weapon_to_place(resources_remaining)
 		if weapon_choice == null:
 			print("AI: No affordable weapons left")
-			break  # No affordable weapons left
+			break # No affordable weapons left
 			
 		var position = _determine_weapon_position(weapon_choice)
 		if position == null:
 			print("AI: No valid positions left for " + weapon_choice.name)
-			break  # No valid positions left
+			break # No valid positions left
 			
 		print("AI placing weapon " + weapon_choice.name + " at position " + str(position))
 		_place_weapon(weapon_choice, position)
@@ -126,7 +131,7 @@ func perform_weapon_placement():
 		print("AI resources remaining: " + str(resources_remaining))
 		
 		# Safety check to prevent infinite loops
-		if weapons_placed >= 5:  # Reasonable upper limit
+		if weapons_placed >= 5: # Reasonable upper limit
 			print("AI reached maximum weapon placement limit")
 			break
 	
@@ -294,9 +299,12 @@ func _place_base(position):
 	print("AI placing base at: " + str(position))
 	var base_type = _get_base_weapon_type()
 	if base_type and position:
-		print("AI using base type: " + str(base_type.name))
-		# FIX: Correct parameter order (weapon, position, player_id)
-		weapon_placement.place_weapon(base_type, position, player_id)
+		print("AI using base type: " + str(base_type.name) + " with id: " + str(base_type.id))
+		# Call place_weapon with correct parameters
+		if weapon_placement.has_method("place_weapon"):
+			weapon_placement.place_weapon(base_type.id, position, player_id)
+		else:
+			print("ERROR: weapon_placement doesn't have place_weapon method")
 	else:
 		print("ERROR: AI couldn't place base - base_type: " + str(base_type) + ", position: " + str(position))
 
@@ -346,7 +354,7 @@ func _select_weapon_to_place(available_resources):
 			if offensive_weapons.size() > 0:
 				# Sort by damage potential
 				offensive_weapons.sort_custom(func(a, b): return a.damage > b.damage)
-				return offensive_weapons[0]  # Choose highest damage weapon
+				return offensive_weapons[0] # Choose highest damage weapon
 			elif defensive_weapons.size() > 0:
 				return defensive_weapons[randi() % defensive_weapons.size()]
 			else:
@@ -481,7 +489,7 @@ func _find_attackable_weapons():
 func _determine_target_for_weapon(weapon):
 	var grid_size = game_board.grid_size
 	var weapon_position = Vector2(weapon.x, weapon.y)
-	var enemy_player_id = 1 - player_id  # Other player
+	var enemy_player_id = 1 - player_id # Other player
 	
 	# Get all possible targets for this weapon
 	var possible_targets = []
@@ -500,13 +508,13 @@ func _determine_target_for_weapon(weapon):
 				# Check if target position has an enemy
 				if cell.occupied_by and cell.occupied_by.player_id == enemy_player_id:
 					if cell.occupied_by.weapon_data.type == "base":
-						target_value = 100  # High priority for enemy bases
+						target_value = 100 # High priority for enemy bases
 					elif cell.occupied_by.weapon_data.type == "offensive":
-						target_value = 50  # Medium priority for offensive weapons
+						target_value = 50 # Medium priority for offensive weapons
 					else:
-						target_value = 25  # Low priority for other structures
+						target_value = 25 # Low priority for other structures
 				else:
-					target_value = 0  # No value for empty cells
+					target_value = 0 # No value for empty cells
 				
 				if target_value > 0:
 					possible_targets.append({

@@ -1,4 +1,4 @@
-extends Node
+extends BaseUIListener # Change from Node to BaseUIListener to inherit get_service
 
 # Placement UI elements
 var weapon_buttons_container
@@ -277,30 +277,60 @@ func _connect_end_placement_button():
 
 # Handler for end placement button
 func _on_end_placement_pressed():
+	print("PlacementUIManager: End placement button pressed")
+	
 	if !weapon_placement:
+		print("PlacementUIManager: No weapon_placement reference")
 		return
 	
 	var is_base_phase = false
-	var phase_manager = null
-	if Engine.has_singleton("GameManager"):
-		phase_manager = Engine.get_singleton("GameManager").get_service("PhaseManager")
+	var phase_manager = get_service("PhaseManager")
+	var current_player_index = player_manager.current_player_index
 	
 	if phase_manager and "Phase" in phase_manager and "current_phase" in phase_manager:
 		is_base_phase = (phase_manager.current_phase == phase_manager.Phase.BASE_PLACEMENT)
-	else:
-		var game_state_machine = null
-		if Engine.has_singleton("GameManager"):
-			game_state_machine = Engine.get_singleton("GameManager").get_service("GameStateMachine")
+		print("PlacementUIManager: Current phase is " +
+			  ("BASE_PLACEMENT" if is_base_phase else "WEAPON_PLACEMENT") +
+			  " for player " + str(current_player_index))
 		
-		if game_state_machine and "GameState" in game_state_machine and "current_state" in game_state_machine:
-			is_base_phase = (game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT)
+		# For base placement, ensure it's actually completed
+		var can_end_phase = true
+		
+		if is_base_phase:
+			# Double-check if the base has been placed
+			can_end_phase = weapon_placement.base_placement_complete[current_player_index]
+			if !can_end_phase:
+				print("PlacementUIManager: Cannot end base placement - base not yet placed")
+				return
+		
+		# Emit event for phase completion - this should work for both phases
+		print("PlacementUIManager: Emitting PHASE_ACTION_COMPLETED event")
+		emit_event("PHASE_ACTION_COMPLETED", {
+			"phase": phase_manager.Phase.BASE_PLACEMENT if is_base_phase else phase_manager.Phase.WEAPON_PLACEMENT,
+			"player_index": current_player_index,
+			"all_players_complete": current_player_index == 1
+		})
+		
+		return
 	
-	if is_base_phase:
-		var current_player = 0
-		if player_manager and "current_player_index" in player_manager:
-			current_player = player_manager.current_player_index
-			
-		if !weapon_placement.base_placement_complete[current_player]:
-			return
-	
-	weapon_placement.end_placement_phase()
+	# Fallback approach using GameStateMachine
+	print("PlacementUIManager: No PhaseManager found, attempting fallback with GameStateMachine")
+	var game_state_machine = get_service("GameStateMachine")
+	if game_state_machine:
+		if game_state_machine.current_state == game_state_machine.GameState.BASE_PLACEMENT:
+			game_state_machine._on_base_placement_complete(current_player_index)
+		else:
+			game_state_machine.placement_completed()
+
+# Helper function to emit events safely
+func emit_event(event_name, event_data = null):
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		if game_manager:
+			game_manager.emit_event(event_name, event_data)
+
+# If extending BaseUIListener isn't an option, add this method:
+func get_service(service_name):
+	if Engine.has_singleton("GameManager"):
+		return Engine.get_singleton("GameManager").get_service(service_name)
+	return null

@@ -110,6 +110,13 @@ func _input(event):
 	if !game_initialized:
 		return
 	
+	# Check if game is waiting for AI before handling input
+	var phase_manager = get_service("PhaseManager")
+	if phase_manager and phase_manager.is_game_waiting():
+		# Block all input while waiting
+		get_viewport().set_input_as_handled()
+		return
+	
 	var game_state_machine = GameManager.game_state_machine
 	if !game_state_machine or !game_state_machine.is_initialized:
 		return
@@ -123,6 +130,12 @@ func _input(event):
 		game_state_machine.GameState.TARGETING:
 			if GameManager.targeting_state:
 				GameManager.targeting_state.handle_input(event)
+
+# Helper method to get service from GameManager
+func get_service(service_name):
+	if Engine.has_singleton("GameManager"):
+		return Engine.get_singleton("GameManager").get_service(service_name)
+	return null
 
 # Handle targeting button press - this is now a callback for base_ui_manager
 func _on_targeting_button_pressed(weapon, player_id):

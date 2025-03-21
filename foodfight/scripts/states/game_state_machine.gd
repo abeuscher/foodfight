@@ -97,10 +97,7 @@ func initialize(p_game_board, p_weapon_types, p_weapon_placement,
 # Emit an event through the event bus
 func emit_event(event_name, event_data = null):
 	if event_bus:
-		print("GameStateMachine: Emitting event: " + event_name)
 		event_bus.emit_event(event_name, event_data)
-	else:
-		print("WARNING: No event bus available to emit event " + event_name)
 
 # Set single player mode (always true in this version)
 func set_single_player_mode(enabled):
@@ -110,7 +107,6 @@ func set_single_player_mode(enabled):
 func initialize_state(initial_state):
 	current_state = initial_state
 	is_initialized = true
-	print("GameStateMachine: Initialized with state " + str(GameState.keys()[initial_state]))
 
 # Phase started callback
 func _on_phase_started(phase, player_index):
@@ -118,11 +114,13 @@ func _on_phase_started(phase, player_index):
 
 # Phase completed callback
 func _on_phase_completed(phase, player_index):
-	print("GameStateMachine: Phase " + str(GameState.keys()[phase]) + " completed")
+	# State transitions are handled by the phase manager
+	pass
 
 # Delegated methods - now pass through to PhaseManager
 func _on_base_placement_complete(player_index):
-	phase_manager.base_placement_completed(player_index)
+	if phase_manager:
+		phase_manager.base_placement_completed(player_index)
 
 # Check if a fallback is needed for AI actions
 func check_ai_fallback_needed():
@@ -134,62 +132,54 @@ func check_ai_fallback_needed():
 				GameState.BASE_PLACEMENT:
 					# If AI is stuck in base placement, force it
 					if !player_manager.get_player_has_base(1):
-						print("AI appears stuck in base placement, using fallback")
-						_force_ai_base_placement()
+						if phase_manager != null:
+							phase_manager._force_ai_base_placement()
+						else:
+							_force_ai_base_placement()
 						return true
 						
 				GameState.WEAPON_PLACEMENT:
 					# If AI is stuck in weapon placement, force completion
-					print("AI appears stuck in weapon placement, using fallback")
 					if phase_manager != null:
 						phase_manager.weapon_placement_completed(player_manager.current_player_index)
 					return true
 					
 				GameState.TARGETING:
-					# If AI is stuck in targeting, using fallback
-					print("AI appears stuck in targeting, using fallback")
-					phase_manager.targeting_completed()
+					# If AI is stuck in targeting, use fallback
+					if phase_manager != null:
+						phase_manager.targeting_completed(player_manager.current_player_index)
 					return true
 		
 		return false
 	else:
-		# Delegate to phase manager
+		# Delegate to phase manager if available
 		return false
 
 # Fallback function to force AI base placement if needed
 func _force_ai_base_placement():
-	if phase_manager != null:
-		phase_manager._force_ai_base_placement()
+	# This is a backup method to ensure the game doesn't freeze
+	# Get the AI opponent
+	var ai_opponent = null
+	if Engine.has_singleton("GameManager"):
+		ai_opponent = Engine.get_singleton("GameManager").ai_opponent
+	
+	if ai_opponent:
+		# Perform AI base placement directly
+		var result = ai_opponent.perform_base_placement()
+		
+		# Force completion after a short delay
+		await get_tree().create_timer(1.0).timeout
+		_on_base_placement_complete(1) # Move to Player 2's base placement completion
 	else:
-		# This is a backup method to ensure the game doesn't freeze
-		print("Forcing AI base placement as fallback")
-		
-		# Get the AI opponent
-		var ai_opponent = null
-		if Engine.has_singleton("GameManager"):
-			ai_opponent = Engine.get_singleton("GameManager").ai_opponent
-		
-		if ai_opponent:
-			# Perform AI base placement directly
-			var result = ai_opponent.perform_base_placement()
-			print("Forced AI base placement result:", result)
-			
-			# Force completion after a short delay
-			await get_tree().create_timer(1.0).timeout
-			print("Forcing completion of AI base placement phase")
-			_on_base_placement_complete(1) # Move to Player 2's base placement completion
-		else:
-			print("CRITICAL ERROR: Cannot find AI opponent for fallback base placement")
-			# As last resort, just move to next phase
-			await get_tree().create_timer(1.0).timeout
-			_on_base_placement_complete(1)
+		push_error("CRITICAL ERROR: Cannot find AI opponent for fallback base placement")
+		# As last resort, just move to next phase
+		await get_tree().create_timer(1.0).timeout
+		_on_base_placement_complete(1)
 
 # Modified _set_state function to emit an event
 func _set_state(new_state):
 	var old_state = current_state
 	current_state = new_state
-	
-	print("GameStateMachine: State changed from " + str(GameState.keys()[old_state]) + " to " + str(GameState.keys()[new_state]))
 	
 	# Only emit event if phase_manager is not available (to avoid duplicates)
 	if phase_manager == null:
@@ -266,3 +256,16 @@ func connect_ui_buttons(main_scene):
 			if game_state_machine.current_state == game_state_machine.GameState.TARGETING:
 				game_state_machine.targeting_completed()
 		)
+
+# Add the missing methods that might be called from UI buttons
+func placement_completed():
+	if phase_manager:
+		phase_manager.weapon_placement_completed(player_manager.current_player_index)
+	else:
+		push_error("GameStateMachine: Cannot complete placement - phase_manager is null")
+
+func targeting_completed():
+	if phase_manager:
+		phase_manager.targeting_completed(player_manager.current_player_index)
+	else:
+		push_error("GameStateMachine: Cannot complete targeting - phase_manager is null")

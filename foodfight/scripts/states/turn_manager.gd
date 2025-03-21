@@ -6,6 +6,7 @@ signal player_changed(new_player_index)
 var current_player_index = 0
 var player_manager
 var phase_manager
+var total_players = 2 # Add missing variable that was referenced in the code
 
 func initialize(p_player_manager):
     player_manager = p_player_manager
@@ -16,6 +17,9 @@ func initialize(p_player_manager):
         var game_manager = Engine.get_singleton("GameManager")
         phase_manager = game_manager.get_service("PhaseManager")
         
+    # Emit initial signal so UI can update
+    emit_signal("player_changed", current_player_index)
+    
     return self
 
 # Get current player name
@@ -26,6 +30,7 @@ func get_current_player_name():
 func next_player():
     player_manager.next_player()
     current_player_index = player_manager.current_player_index
+    print("TurnManager: Changed to player " + str(current_player_index + 1) + " (" + get_current_player_name() + ")")
     emit_signal("player_changed", current_player_index)
     return current_player_index
 
@@ -33,6 +38,7 @@ func next_player():
 func reset_current_player():
     player_manager.reset_current_player()
     current_player_index = player_manager.current_player_index
+    print("TurnManager: Reset to player " + str(current_player_index + 1) + " (" + get_current_player_name() + ")")
     emit_signal("player_changed", current_player_index)
     return current_player_index
 

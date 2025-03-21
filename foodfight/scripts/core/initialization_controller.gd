@@ -28,10 +28,14 @@ var required_dependencies = {
 	"TargetingState": ["GameBoard", "WeaponManager", "TargetingManager"],
 	"AttackState": ["GameBoard", "WeaponTypes"],
 	"AIOpponent": ["GameBoard", "WeaponTypes", "WeaponPlacement", "PlayerManager", "TargetingManager"],
-	"GameStateMachine": ["GameBoard", "WeaponTypes", "WeaponPlacement", "TargetingState", "AttackState", "BaseUIManager", "PlayerManager"]
+	"GameStateMachine": ["GameBoard", "WeaponTypes", "WeaponPlacement", "TargetingState", "AttackState", "BaseUIManager", "PlayerManager"],
+	"PhaseManager": ["GameBoard", "WeaponTypes", "WeaponPlacement", "PlayerManager", "EventBus"]
 }
 
 var _game_manager = null
+
+# Use load() instead of preload() for scripts that might have circular dependencies
+var PhaseManagerScript = load("res://scripts/states/phase_manager.gd")
 
 func _init(game_manager):
 	_game_manager = game_manager
@@ -87,6 +91,11 @@ func check_dependencies(component_name: String) -> Dictionary:
 
 # Stage implementation methods
 func initialize_core_systems() -> bool:
+	# Initialize EventBus first before any other service that might use it
+	_initialize_service("EventBus")
+	_initialize_service("GameBoard")
+	_initialize_service("PlayerManager")
+	
 	# Initialize game board (no dependencies)
 	_game_manager.game_board.initialize_grid()
 	_game_manager.register_service("GameBoard", _game_manager.game_board)
@@ -172,7 +181,44 @@ func initialize_state_systems() -> bool:
 	attack_state.initialize(_game_manager.game_board, _game_manager.weapon_types)
 	_game_manager.register_service("AttackState", attack_state)
 	
+	# Initialize PhaseManager after EventBus and all other state systems
+	_initialize_phase_manager()
+	
 	return advance_to_next_stage()
+
+# Added new method to initialize PhaseManager correctly
+func _initialize_phase_manager():
+	# Get the PhaseManager from the main scene
+	var main_scene = _game_manager.get_tree().current_scene
+	var phase_manager = main_scene.get_node_or_null("PhaseManager")
+	
+	if phase_manager:
+		# Check dependencies
+		var dep_check = check_dependencies("PhaseManager")
+		if not dep_check.success:
+			push_error("PhaseManager missing dependencies: " + str(dep_check.missing))
+			# Continue anyway - we'll try to recover
+		
+		# Initialize PhaseManager with all dependencies
+		phase_manager.initialize(
+			_game_manager.game_board,
+			_game_manager.weapon_types,
+			_game_manager.weapon_placement,
+			_game_manager.targeting_state,
+			_game_manager.attack_state,
+			_game_manager.base_ui_manager,
+			_game_manager.player_manager
+		)
+		
+		# Register as service
+		_game_manager.register_service("PhaseManager", phase_manager)
+		
+		# Explicitly connect to EventBus
+		if phase_manager and phase_manager.has_method("_subscribe_to_events"):
+			phase_manager._subscribe_to_events()
+			print("Explicitly connected PhaseManager to EventBus")
+	else:
+		push_error("PhaseManager not found in main scene")
 
 func initialize_ai_systems() -> bool:
 	# Initialize AI opponent
@@ -199,6 +245,23 @@ func initialize_ui_systems() -> bool:
 	# Initialize game UI manager
 	if _game_manager.base_ui_manager:
 		_game_manager.register_service("BaseUIManager", _game_manager.base_ui_manager)
+		
+		# Important: Initialize and register PhaseUIManager BEFORE proceeding
+		var phase_ui_manager = _game_manager.base_ui_manager.get_node_or_null("PhaseUIManager")
+		if phase_ui_manager:
+			print("PhaseUIManager found in BaseUIManager")
+			_game_manager.register_service("PhaseUIManager", phase_ui_manager)
+		else:
+			print("PhaseUIManager not found in BaseUIManager")
+		
+		# Initialize other UI managers here
+		var player_ui_manager = _game_manager.base_ui_manager.get_node_or_null("PlayerUIManager")
+		if player_ui_manager:
+			_game_manager.register_service("PlayerUIManager", player_ui_manager)
+			
+		var placement_ui_manager = _game_manager.base_ui_manager.get_node_or_null("PlacementUIManager")
+		if placement_ui_manager:
+			_game_manager.register_service("PlacementUIManager", placement_ui_manager)
 	else:
 		# Create a default UI manager if needed
 		var main_scene = _game_manager.get_tree().current_scene
@@ -233,6 +296,9 @@ func connect_signals() -> bool:
 	game_state_machine.set_single_player_mode(true)
 	_game_manager.register_service("GameStateMachine", game_state_machine)
 	
+	# Make sure player_manager is properly set for GameStateMachine
+	game_state_machine.player_manager = _game_manager.player_manager
+	
 	# Get references to turn_manager and ai_controller after game_state_machine initialization
 	_game_manager.turn_manager = game_state_machine.turn_manager
 	_game_manager.ai_controller = game_state_machine.ai_controller
@@ -253,4 +319,33 @@ func connect_signals() -> bool:
 	else:
 		push_error("No BaseUIManager available for UI update!")
 	
+	# Ensure PhaseManager connects to EventBus properly
+	var phase_manager = _game_manager.get_service("PhaseManager")
+	if phase_manager and phase_manager.has_method("_subscribe_to_events"):
+		phase_manager._subscribe_to_events()
+		print("Final check: Ensuring PhaseManager is connected to EventBus")
+	
 	return advance_to_next_stage()
+
+# Method to handle service initialization
+func _initialize_service(service_name):
+	print("Initializing service: " + service_name)
+	
+	# Special case for critical services
+	if service_name == "EventBus":
+		# Make sure EventBus is created first
+		var event_bus = _game_manager.event_bus
+		if event_bus:
+			_game_manager.register_service("EventBus", event_bus)
+		else:
+			push_error("Failed to initialize EventBus")
+	
+	# For PhaseManager specifically, ensure it's properly connected to EventBus
+	elif service_name == "PhaseManager":
+		var phase_manager = _game_manager.get_service("PhaseManager")
+		if phase_manager and phase_manager.has_method("_subscribe_to_events"):
+			phase_manager._subscribe_to_events()
+			print("Explicitly connected PhaseManager to EventBus")
+	
+	# Return true indicating success
+	return true

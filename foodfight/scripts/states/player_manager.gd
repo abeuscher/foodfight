@@ -6,16 +6,16 @@ enum PlayerType {HUMAN, AI}
 # Player information
 var player1_name = ""
 var player2_name = ""
-var current_player = 1  # 1 or 2 for display purposes
-var current_player_index = 0  # 0 or 1 for array indexing
-var player_types = [PlayerType.HUMAN, PlayerType.AI]  # Default: player 1 is human, player 2 is AI
+var current_player = 1 # 1 or 2 for display purposes
+var current_player_index = 0 # 0 or 1 for array indexing
+var player_types = [PlayerType.HUMAN, PlayerType.AI] # Default: player 1 is human, player 2 is AI
 
 # Player ingredients (consolidated from separate score and resources)
-var player1_ingredients = 25  # Starting ingredients
-var player2_ingredients = 25  # Starting ingredients
+var player1_ingredients = 25 # Starting ingredients
+var player2_ingredients = 25 # Starting ingredients
 
 # Game result
-var winning_player = -1  # -1 = no winner yet, 0 = player 1, 1 = player 2
+var winning_player = -1 # -1 = no winner yet, 0 = player 1, 1 = player 2
 
 func _ready():
 	# Wait for game data
@@ -54,6 +54,7 @@ func next_player():
 func reset_current_player():
 	current_player = 1
 	current_player_index = 0
+	print("Current player reset to: " + get_current_player_name() + " (index: " + str(current_player_index) + ")")
 
 # Get the name of the current player
 func get_current_player_name():
@@ -72,11 +73,18 @@ func set_player_type(player_idx, type):
 
 # Check if player is AI
 func is_ai_player(player_idx):
+	# Debug output
+	print("PlayerManager: Checking if player " + str(player_idx) + " is AI: " +
+		  str(player_types[player_idx] == PlayerType.AI) +
+		  " (type=" + str(PlayerType.keys()[player_types[player_idx]]) + ")")
 	return player_types[player_idx] == PlayerType.AI
 
 # Check if current player is AI
 func is_current_player_ai():
-	return is_ai_player(current_player_index)
+	var is_ai = is_ai_player(current_player_index)
+	print("PlayerManager: Current player " + str(current_player_index) + " (" +
+		  get_current_player_name() + ") is AI: " + str(is_ai))
+	return is_ai
 
 # Set player name
 func set_player_name(player_idx, name):
@@ -113,14 +121,14 @@ func get_player_resources(player_id):
 func set_winner(player_id):
 	winning_player = player_id
 	var winner_name = get_player_name(player_id)
-	print("Game over! ", winner_name, " wins with ", 
+	print("Game over! ", winner_name, " wins with ",
 		player1_ingredients if player_id == 0 else player2_ingredients, " ingredients")
 
 # Reset the game state
 func reset_game():
 	# Reset ingredients
-	player1_ingredients = 25  # Starting ingredients
-	player2_ingredients = 25  # Starting ingredients
+	player1_ingredients = 25 # Starting ingredients
+	player2_ingredients = 25 # Starting ingredients
 	
 	# Reset player turn
 	reset_current_player()
@@ -129,3 +137,9 @@ func reset_game():
 	winning_player = -1
 	
 	print("Game reset. Starting fresh game between ", player1_name, " and ", player2_name)
+
+# Check if player has a base - needed for AI fallback logic
+func get_player_has_base(player_index):
+	# This would typically check game board state, but for fallback purposes,
+	# we'll implement a simple version here
+	return false # Assume player doesn't have a base for fallback trigger purposes

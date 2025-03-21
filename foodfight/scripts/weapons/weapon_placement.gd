@@ -22,6 +22,12 @@ var is_base_placement_phase = false
 # For recursion prevention
 var _active_method_calls = {}
 
+# Add this property to track current game phase
+var current_phase = 0 # Default to UNINITIALIZED
+
+# Add this at the top to import the Phase enum from phase_manager.gd
+const PhaseManager = preload("res://scripts/states/phase_manager.gd")
+
 func _ready():
 	# Create weapon visualization if it doesn't exist
 	weapon_visualization = get_node_or_null("WeaponVisualization")
@@ -38,8 +44,8 @@ func _ready():
 func _process(_delta):
 	# Update visualization if mouse is moving during placement
 	if (placement_active and selected_weapon):
-		var mouse_pos = get_viewport().get_mouse_position()
-		update_placement_preview(mouse_pos)
+		# Fix call to use no parameters - the function will get mouse position itself
+		update_placement_preview()
 
 func initialize(p_game_board, p_weapon_types):
 	game_board = p_game_board
@@ -61,12 +67,18 @@ func initialize(p_game_board, p_weapon_types):
 
 # Select a weapon for placement based on ID
 func select_weapon_for_placement(weapon_id):
-	print("WeaponPlacement: select_weapon_for_placement called during phase " + ("BASE_PLACEMENT" if is_base_placement_phase else "WEAPON_PLACEMENT"))
+	print("WeaponPlacement: select_weapon_for_placement called during phase " +
+		  ("BASE_PLACEMENT" if is_base_placement_phase else "WEAPON_PLACEMENT"))
 	
 	# Restrict weapon selection during base placement phase
-	if is_base_placement_phase:
-		print("WeaponPlacement: ERROR - Cannot select weapons during BASE_PLACEMENT phase")
-		print("WeaponPlacement: Call stack: ", get_stack())
+	if is_base_placement_phase: # Use is_base_placement_phase instead of current_phase
+		push_error("WeaponPlacement: ERROR - Cannot select weapons during BASE_PLACEMENT phase")
+		# Print call stack to help debug
+		var stack = get_stack()
+		var stack_string = []
+		for i in range(1, min(stack.size(), 10)): # Skip this function, limit to 10 entries
+			stack_string.append({"source": stack[i]["source"], "function": stack[i]["function"], "line": stack[i]["line"]})
+		push_error("WeaponPlacement: Call stack: " + str(stack_string))
 		return
 	
 	print("WeaponPlacement: Selecting weapon for placement with ID: ", weapon_id)
@@ -119,25 +131,15 @@ func handle_input(event):
 	# We no longer handle clicks here to avoid duplicate handling
 
 # Update the placement preview based on mouse position
-func update_placement_preview(global_pos):
-	if (!placement_active or !selected_weapon):
+func update_placement_preview(mouse_pos = null):
+	if !weapon_visualization:
 		return
-	# Ensure weapon visualization is initialized
-	if (!weapon_visualization):
-		print("WARNING: No weapon visualization available for preview")
-		# Try to create it
-		_ready()
-		return
-	
-	var cell = game_board.get_cell_at_position(global_pos)
-	if (cell):
-		# Check if placement is valid
-		var is_valid = can_place_at_position(selected_weapon, cell.position, current_player_id)
 		
-		# Update the visual preview
-		weapon_visualization.update_preview_size(selected_weapon)
-		weapon_visualization.update_preview_position(cell.position, is_valid)
-		weapon_visualization.show_preview(true)
+	if mouse_pos == null:
+		mouse_pos = get_viewport().get_mouse_position()
+		
+	# Forward to visualization system
+	weapon_visualization.update_placement_preview()
 
 # Try to place a weapon at the given position
 func attempt_weapon_placement(global_pos):
@@ -176,7 +178,9 @@ func attempt_weapon_placement(global_pos):
 
 # Try to place a base at the given position
 func attempt_base_placement(global_pos):
-	print("WeaponPlacement: Attempting base placement at ", global_pos)
+	print("WeaponPlacement: Attempting base placement at " + str(global_pos) +
+		" for player " + str(current_player_id) +
+		" (base_placement_complete: " + str(base_placement_complete) + ")")
 	if (base_placement_complete[current_player_id]):
 		print("WeaponPlacement: Base placement already complete for player", current_player_id)
 		return
@@ -210,7 +214,8 @@ func attempt_base_placement(global_pos):
 		place_weapon(base_weapon, cell.position, current_player_id)
 		# Mark base placement as complete for this player
 		base_placement_complete[current_player_id] = true
-		print("WeaponPlacement: Base placement completed for player ", current_player_id + 1)
+		print("WeaponPlacement: Base placement completed for player " +
+			str(current_player_id) + " (name: " + get_player_name(current_player_id) + ")")
 		
 		# Emit the weapon_placed signal
 		emit_signal("weapon_placed", current_player_id, base_weapon, cell.position)
@@ -221,12 +226,17 @@ func attempt_base_placement(global_pos):
 		if (weapon_visualization):
 			weapon_visualization.show_preview(false)
 		
+		 # REMOVE direct call to phase_manager and ONLY use event emission
 		# First get the service, then check it properly - following Service Locator Pattern
 		var phase_manager = get_service("PhaseManager")
 		# Defensive programming - check if service exists AND has required method
-		if (phase_manager and phase_manager.has_method("base_placement_completed")):
-			print("Notifying PhaseManager of base placement completion")
-			phase_manager.base_placement_completed(current_player_id)
+		if (is_base_placement_phase):
+			print("Emitting PHASE_ACTION_COMPLETED event for base placement")
+			emit_event("PHASE_ACTION_COMPLETED", {
+				"phase": PhaseManager.Phase.BASE_PLACEMENT,
+				"player_index": current_player_id,
+				"all_players_complete": current_player_id == 1
+			})
 		else:
 			# Fallback to game state machine with proper error logging
 			print("WARNING: PhaseManager service not available, falling back to GameStateMachine")
@@ -404,3 +414,45 @@ func emit_event(event_name, event_data = null):
 		Engine.get_singleton("GameManager").emit_event(event_name, event_data)
 	else:
 		print("GameManager singleton not available, can't emit event: ", event_name)
+
+# Enable or disable placement preview
+func enable_placement_preview(enabled):
+	# Connect to input events if not already connected
+	if weapon_visualization:
+		weapon_visualization.show_placement_preview = enabled
+	
+	# Ensure preview is updated if enabled
+	if enabled and selected_weapon:
+		# Force an update of the placement preview
+		update_placement_preview()
+
+# Helper to get player name
+func get_player_name(player_index):
+	var player_manager = get_service("PlayerManager")
+	if player_manager and player_manager.has_method("get_player_name"):
+		return player_manager.get_player_name(player_index)
+	return "Player " + str(player_index + 1)
+
+# Track when a base is successfully placed and notify PhaseManager
+func _finalize_base_placement(position, player_id):
+	# Mark base placement as complete for this player
+	base_placement_complete[player_id] = true
+	
+	# Use service locator pattern to get player_manager
+	var player_manager = get_service("PlayerManager")
+	var player_name = "Player " + str(player_id + 1) # Default name
+	if player_manager:
+		player_name = player_manager.get_player_name(player_id)
+		
+	print("WeaponPlacement: Base placement completed for player " + str(player_id) + " (name: " + player_name + ")")
+	
+	# Get PhaseManager service to notify completion
+	var phase_manager = get_service("PhaseManager")
+	print("Getting PhaseManager service: found, NullService: " + str(phase_manager is NullService))
+	
+	# This event emission is enough
+	emit_event("PHASE_ACTION_COMPLETED", {
+		"phase": PhaseManager.Phase.BASE_PLACEMENT if current_phase == PhaseManager.Phase.BASE_PLACEMENT else PhaseManager.Phase.WEAPON_PLACEMENT,
+		"player_index": player_id,
+		"all_players_complete": player_id == 1
+	})

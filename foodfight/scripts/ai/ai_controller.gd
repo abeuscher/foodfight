@@ -1,5 +1,8 @@
 extends Node
 
+# Import Phase enum from phase_manager.gd
+const Phase = preload("res://scripts/states/phase_manager.gd").Phase
+
 # Define signals
 signal ai_action_started
 signal ai_action_completed
@@ -19,6 +22,7 @@ var player_manager
 enum AIAction {BASE_PLACEMENT, WEAPON_PLACEMENT, TARGETING}
 
 func initialize(p_ai_opponent, p_ui_manager, p_phase_manager, p_player_manager):
+	print("AIController: Initializing...")
 	ai_opponent = p_ai_opponent
 	ui_manager = p_ui_manager
 	phase_manager = p_phase_manager
@@ -30,9 +34,12 @@ func initialize(p_ai_opponent, p_ui_manager, p_phase_manager, p_player_manager):
 			ai_ui_manager = ui_manager
 		elif "ai_ui_manager" in ui_manager:
 			ai_ui_manager = ui_manager.ai_ui_manager
-		elif ui_manager.get_parent() and "ai_ui_manager" in ui_manager.get_parent():
-			ai_ui_manager = ui_manager.get_parent().ai_ui_manager
 	
+	if !ai_opponent:
+		push_error("AIController: Failed to initialize - missing AI opponent!")
+		return null
+		
+	print("AIController: Successfully initialized")
 	ai_initialized = true
 	return self
 
@@ -44,73 +51,115 @@ func is_ai_turn():
 
 # Process AI turn if needed
 func process_ai_turn_if_needed():
-	if !phase_manager:
+	print("AIController: process_ai_turn_if_needed called")
+	
+	if !player_manager:
+		print("AIController: No player manager available!")
 		return false
+	
+	if !player_manager.is_current_player_ai():
+		print("AIController: Not AI's turn - player index: " + str(player_manager.current_player_index))
+		return false
+		
+	if !phase_manager:
+		print("AIController: No phase manager - skipping")
+		return false
+	
+	if ai_turn_in_progress:
+		print("AIController: AI turn already in progress")
+		return true
+	
+	print("AIController: Processing AI turn for phase " + str(phase_manager.current_phase))
 	
 	# Handle different states
 	match phase_manager.current_phase:
-		phase_manager.Phase.BASE_PLACEMENT:
+		Phase.BASE_PLACEMENT:
+			print("AIController: Handling AI base placement")
 			handle_base_placement()
 			return true
 			
-		phase_manager.Phase.WEAPON_PLACEMENT:
+		Phase.WEAPON_PLACEMENT:
+			print("AIController: Handling AI weapon placement")
 			handle_weapon_placement()
 			return true
 			
-		phase_manager.Phase.TARGETING:
+		Phase.TARGETING:
+			print("AIController: Handling AI targeting")
 			handle_targeting()
 			return true
 	
+	print("AIController: No matching phase handler")
 	return false
 
 # Show AI thinking indicator safely
 func _show_ai_thinking():
-	if ai_ui_manager:
+	emit_signal("ai_action_started")
+	
+	if ai_ui_manager and ai_ui_manager.has_method("show_ai_thinking"):
 		ai_ui_manager.show_ai_thinking()
+	elif ui_manager and ui_manager.has_method("show_ai_thinking"):
+		ui_manager.show_ai_thinking()
 
 # Hide AI thinking indicator safely
 func _hide_ai_thinking():
-	if ai_ui_manager:
+	emit_signal("ai_action_completed")
+	
+	if ai_ui_manager and ai_ui_manager.has_method("hide_ai_thinking"):
 		ai_ui_manager.hide_ai_thinking()
+	elif ui_manager and ui_manager.has_method("hide_ai_thinking"):
+		ui_manager.hide_ai_thinking()
 
 # Handle AI base placement
 func handle_base_placement():
-	emit_signal("ai_action_started")
 	if ai_turn_in_progress:
+		print("AIController: Base placement already in progress")
 		return
 	
+	print("AIController: Starting base placement action")
 	ai_turn_in_progress = true
 	
 	# Show AI is thinking
 	_show_ai_thinking()
 	
-	# Connect to completion signal
-	if ai_opponent.is_connected("thinking_completed", Callable(self, "_on_base_placement_completed")):
-		ai_opponent.disconnect("thinking_completed", Callable(self, "_on_base_placement_completed"))
-		
-	ai_opponent.connect("thinking_completed", Callable(self, "_on_base_placement_completed"), CONNECT_ONE_SHOT)
-	
 	# Start AI base placement
+	if !ai_opponent:
+		push_error("AIController: No AI opponent to perform base placement")
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		_complete_base_placement()
+		return
+		
+	print("AIController: Calling AI opponent perform_base_placement")
 	var placement_result = ai_opponent.perform_base_placement()
-	if !placement_result:
-		get_tree().create_timer(2.0).timeout.connect(func():
-			if ai_turn_in_progress:
-				call_deferred("_on_base_placement_completed")
-		)
+	
+	# Always notify completion via setTimeout to ensure UI update
+	get_tree().create_timer(0.5).timeout.connect(_complete_base_placement)
 
-# Handle AI base placement completion
-func _on_base_placement_completed():
+# Complete the base placement process
+func _complete_base_placement():
+	print("AIController: Base placement action complete")
 	ai_turn_in_progress = false
 	_hide_ai_thinking()
-	emit_signal("ai_action_completed")
 	
-	# Notify PhaseManager directly
-	if phase_manager:
-		phase_manager.base_placement_completed(player_manager.current_player_index)
+	var player_idx = player_manager.current_player_index
+	print("AIController: Emitting PHASE_ACTION_COMPLETED event for player " + str(player_idx))
+	
+	# Ensure we're emitting for the correct player (the AI)
+	if player_idx != 1: # AI is typically player 1
+		print("AIController: WARNING - Current player index mismatch, correcting to AI player (1)")
+		player_idx = 1
+	
+	# Use event bus to emit event with the corrected player index
+	if Engine.has_singleton("GameManager"):
+		var game_manager = Engine.get_singleton("GameManager")
+		game_manager.emit_event("PHASE_ACTION_COMPLETED", {
+			"phase": 2, # BASE_PLACEMENT
+			"player_index": player_idx,
+			"all_players_complete": player_idx == 1
+		})
 
 # Handle AI weapon placement
 func handle_weapon_placement():
-	emit_signal("ai_action_started")
 	if ai_turn_in_progress:
 		return
 	
@@ -119,33 +168,26 @@ func handle_weapon_placement():
 	# Show AI is thinking
 	_show_ai_thinking()
 	
-	# Connect to completion signal
-	if ai_opponent.is_connected("thinking_completed", Callable(self, "_on_weapon_placement_completed")):
-		ai_opponent.disconnect("thinking_completed", Callable(self, "_on_weapon_placement_completed"))
-		
-	ai_opponent.connect("thinking_completed", Callable(self, "_on_weapon_placement_completed"), CONNECT_ONE_SHOT)
-	
 	# Start AI weapon placement
+	if !ai_opponent:
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		return
+		
 	var placement_result = ai_opponent.perform_weapon_placement()
-	if !placement_result:
-		get_tree().create_timer(3.0).timeout.connect(func():
-			if ai_turn_in_progress:
-				call_deferred("_on_weapon_placement_completed")
-		)
-
-# Handle AI weapon placement completion
-func _on_weapon_placement_completed():
-	ai_turn_in_progress = false
-	_hide_ai_thinking()
-	emit_signal("ai_action_completed")
 	
-	# Notify PhaseManager directly
-	if phase_manager:
-		phase_manager.weapon_placement_completed(player_manager.current_player_index)
+	# Create a short timer to complete the action (gives UI time to update)
+	get_tree().create_timer(1.0).timeout.connect(func():
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		
+		# Notify PhaseManager directly
+		if phase_manager:
+			phase_manager.weapon_placement_completed(player_manager.current_player_index)
+	)
 
 # Handle AI targeting
 func handle_targeting():
-	emit_signal("ai_action_started")
 	if ai_turn_in_progress:
 		return
 	
@@ -154,28 +196,23 @@ func handle_targeting():
 	# Show AI is thinking
 	_show_ai_thinking()
 	
-	# Connect to completion signal
-	if ai_opponent.is_connected("thinking_completed", Callable(self, "_on_targeting_completed")):
-		ai_opponent.disconnect("thinking_completed", Callable(self, "_on_targeting_completed"))
-		
-	ai_opponent.connect("thinking_completed", Callable(self, "_on_targeting_completed"), CONNECT_ONE_SHOT)
-	
 	# Start AI targeting
+	if !ai_opponent:
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		return
+		
 	var targeting_result = ai_opponent.perform_targeting()
-	if targeting_result:
-		pass # No action needed if targeting succeeds
-	else:
-		call_deferred("_on_targeting_completed")
-
-# Handle AI targeting completion
-func _on_targeting_completed():
-	ai_turn_in_progress = false
-	_hide_ai_thinking()
-	emit_signal("ai_action_completed")
 	
-	# Notify PhaseManager directly
-	if phase_manager:
-		phase_manager.targeting_completed(player_manager.current_player_index)
+	# Create a short timer to complete the action (gives UI time to update)
+	get_tree().create_timer(1.0).timeout.connect(func():
+		ai_turn_in_progress = false
+		_hide_ai_thinking()
+		
+		# Notify PhaseManager directly
+		if phase_manager:
+			phase_manager.targeting_completed(player_manager.current_player_index)
+	)
 
 # Check if AI is currently processing
 func is_thinking():
@@ -194,3 +231,22 @@ func get_service(service_name):
 	if Engine.has_singleton("GameManager"):
 		return Engine.get_singleton("GameManager").get_service(service_name)
 	return null
+
+# Add event listeners to respond to game events
+func on_next_player_turn(event_data):
+	if !player_manager.is_current_player_ai():
+		return
+		
+	# Simply respond to events that any human player would also receive
+	match event_data.phase:
+		Phase.BASE_PLACEMENT:
+			_start_ai_base_placement()
+		Phase.WEAPON_PLACEMENT:
+			_start_ai_weapon_placement()
+
+# Add these helper methods that were referenced:
+func _start_ai_base_placement():
+	handle_base_placement()
+	
+func _start_ai_weapon_placement():
+	handle_weapon_placement()

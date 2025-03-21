@@ -72,11 +72,28 @@ func _on_scene_tree_ready():
 
 # Main initialization function called from main.gd
 func initialize_game(main_node):
+	# Get the BaseUIManager immediately and register all UI managers first
+	base_ui_manager = main_node.get_node("BaseUIManager")
+	if base_ui_manager:
+		# Register BaseUIManager as a service
+		register_service("BaseUIManager", base_ui_manager)
+		
+		# Immediately initialize and register UI child components
+		# This ensures PhaseUIManager is available before PhaseManager needs it
+		if base_ui_manager.has_method("initialize_ui_components"):
+			base_ui_manager.initialize_ui_components()
+		
+		# Direct access to PhaseUIManager to guarantee registration
+		phase_ui_manager = base_ui_manager.get_node_or_null("PhaseUIManager")
+		if phase_ui_manager:
+			register_service("PhaseUIManager", phase_ui_manager)
+	
 	# Get references to all components
 	get_component_references(main_node)
 	
-	# Create and start initialization controller
-	initialization_controller = InitializationController.new(self)
+	# Create and start initialization controller - FIX: Load script first instead of using class name
+	var InitControllerScript = load("res://scripts/core/initialization_controller.gd")
+	initialization_controller = InitControllerScript.new(self)
 	initialization_controller.stage_completed.connect(_on_initialization_stage_completed)
 	initialization_controller.initialization_failed.connect(_on_initialization_failed)
 	initialization_controller.all_stages_completed.connect(_on_all_stages_completed)
@@ -196,12 +213,6 @@ func get_service(service_name: String, create_default: bool = false) -> Object:
 func has_service(service_name: String) -> bool:
 	return services.has(service_name)
 
-# Initialize all components in the correct order - DEPRECATED
-# Now handled by InitializationController
-func initialize_components():
-	push_warning("initialize_components is deprecated. Use InitializationController instead.")
-	return false
-
 # Connect signals between components
 func connect_component_signals():
 	var main_scene = get_tree().current_scene
@@ -211,37 +222,51 @@ func connect_component_signals():
 	
 	# Connect targeting state to base_ui_manager
 	var targeting_state = get_service("TargetingState")
-	var base_ui_manager = get_service("BaseUIManager") # Changed from BaseUIManager
+	var base_ui_manager = get_service("BaseUIManager")
 	
-	if targeting_state.has_method("connect") and base_ui_manager.has_method("handle_player_turn_update"):
-		targeting_state.connect("player_turn_started", Callable(base_ui_manager, "handle_player_turn_update"))
+	if targeting_state and targeting_state.has_method("connect") and base_ui_manager and base_ui_manager.has_method("handle_player_turn_update"):
+		if not targeting_state.is_connected("player_turn_started", Callable(base_ui_manager, "handle_player_turn_update")):
+			targeting_state.connect("player_turn_started", Callable(base_ui_manager, "handle_player_turn_update"))
 	
 	# Connect AI signals
 	var ai_opponent = get_service("AIOpponent")
-	if ai_opponent:
+	if ai_opponent and base_ui_manager:
 		print("Connecting AI opponent signals to UI")
-		if base_ui_manager:
-			if base_ui_manager.has_method("show_ai_thinking") and base_ui_manager.has_method("hide_ai_thinking"):
-				if not ai_opponent.is_connected("thinking_started", Callable(base_ui_manager, "show_ai_thinking")):
-					ai_opponent.connect("thinking_started", Callable(base_ui_manager, "show_ai_thinking"))
-				if not ai_opponent.is_connected("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking")):
-					ai_opponent.connect("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking"))
+		if base_ui_manager.has_method("show_ai_thinking") and base_ui_manager.has_method("hide_ai_thinking"):
+			if not ai_opponent.is_connected("thinking_started", Callable(base_ui_manager, "show_ai_thinking")):
+				ai_opponent.connect("thinking_started", Callable(base_ui_manager, "show_ai_thinking"))
+			if not ai_opponent.is_connected("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking")):
+				ai_opponent.connect("thinking_completed", Callable(base_ui_manager, "hide_ai_thinking"))
 	
 	# Connect AI controller signals
 	var ai_controller = get_service("AIController")
-	if ai_controller:
+	if ai_controller and base_ui_manager:
 		print("Connecting AI controller signals to UI")
-		if base_ui_manager:
-			if base_ui_manager.has_method("show_ai_thinking") and base_ui_manager.has_method("hide_ai_thinking"):
-				if not ai_controller.is_connected("ai_action_started", Callable(base_ui_manager, "show_ai_thinking")):
-					ai_controller.connect("ai_action_started", Callable(base_ui_manager, "show_ai_thinking"))
-				if not ai_controller.is_connected("ai_action_completed", Callable(base_ui_manager, "hide_ai_thinking")):
-					ai_controller.connect("ai_action_completed", Callable(base_ui_manager, "hide_ai_thinking"))
+		if base_ui_manager.has_method("show_ai_thinking") and base_ui_manager.has_method("hide_ai_thinking"):
+			if not ai_controller.is_connected("ai_action_started", Callable(base_ui_manager, "show_ai_thinking")):
+				ai_controller.connect("ai_action_started", Callable(base_ui_manager, "show_ai_thinking"))
+			if not ai_controller.is_connected("ai_action_completed", Callable(base_ui_manager, "hide_ai_thinking")):
+				ai_controller.connect("ai_action_completed", Callable(base_ui_manager, "hide_ai_thinking"))
 	
-	# Connect turn manager signals if available
+	# Connect turn manager signals - FIX: Check if signal exists first
 	var turn_manager = get_service("TurnManager")
-	if turn_manager and turn_manager.has_method("connect") and base_ui_manager.has_method("update_player_ui"):
-		turn_manager.connect("player_changed", Callable(base_ui_manager, "update_player_ui"))
+	if turn_manager:
+		print("Checking TurnManager signals...")
+		var signals = turn_manager.get_signal_list()
+		var has_player_changed = false
+		
+		for s in signals:
+			if s.name == "player_changed":
+				has_player_changed = true
+				print("Found 'player_changed' signal in TurnManager")
+				break
+		
+		if has_player_changed and base_ui_manager and base_ui_manager.has_method("update_player_ui"):
+			print("Connecting TurnManager.player_changed to BaseUIManager.update_player_ui")
+			if not turn_manager.is_connected("player_changed", Callable(base_ui_manager, "update_player_ui")):
+				turn_manager.connect("player_changed", Callable(base_ui_manager, "update_player_ui"))
+		else:
+			print("WARNING: Cannot connect TurnManager signals - signal or handler missing")
 
 # Helper function to connect UI buttons
 func connect_ui_buttons(main_scene):
@@ -311,6 +336,10 @@ func register_component(component_name: String, component: Object) -> bool:
 		push_error("Cannot register null component: " + component_name)
 		return false
 		
+	# Special handling for AI components
+	if component_name in ["AIController", "AIOpponent"]:
+		print("Registering critical AI component: " + component_name)
+	
 	# Check dependencies
 	if initialization_controller:
 		var dependency_check = initialization_controller.check_dependencies(component_name)
@@ -382,8 +411,48 @@ func ensure_component_event_connections():
 			print("GameManager: Fixing missing weapon_placement reference in PlacementState")
 			placement_state.weapon_placement = weapon_placement
 	
+	# Explicitly register AI components
+	_register_ai_components()
+	
 	# Check other important connections
 	_ensure_all_essential_connections()
+
+# Add this helper function to ensure AI components are registered
+func _register_ai_components():
+	# Make sure AIOpponent is registered
+	if ai_opponent and !has_service("AIOpponent"):
+		print("GameManager: Registering AIOpponent service")
+		register_service("AIOpponent", ai_opponent)
+	
+	# Initialize AI Controller if we don't have one
+	if !ai_controller and ai_opponent:
+		print("GameManager: Creating new AIController since none exists")
+		var AIControllerScript = load("res://scripts/ai/ai_controller.gd")
+		if AIControllerScript:
+			ai_controller = AIControllerScript.new()
+			ai_controller.name = "AIController"
+			add_child(ai_controller)
+			
+			# Initialize it with required dependencies
+			var phase_manager = get_service("PhaseManager")
+			ai_controller.initialize(
+				ai_opponent,
+				base_ui_manager,
+				phase_manager,
+				player_manager
+			)
+	
+	# Make sure AIController is registered
+	if ai_controller and !has_service("AIController"):
+		print("GameManager: Registering AIController service")
+		register_service("AIController", ai_controller)
+	
+	# Verify we have a working AI controller
+	var controller = get_service("AIController")
+	if controller and controller.has_method("process_ai_turn_if_needed"):
+		print("GameManager: AIController successfully registered")
+	else:
+		push_error("GameManager: Failed to register a working AIController!")
 
 # Add this helper function to verify all important connections
 func _ensure_all_essential_connections():
